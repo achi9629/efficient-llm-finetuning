@@ -1,0 +1,30 @@
+evaluation:
+  metrics:
+    - rouge1
+    - rouge2
+    - rougeL
+    - rougeLsum
+  generation:
+    max_new_tokens: 256
+    num_beams: 4
+    early_stopping: true
+    no_repeat_ngram_size: 3
+    temperature: 1.0
+    do_sample: false
+
+  splits:
+    val: 1000
+    test: 1000
+
+  batch_size: 8
+
+kpi_thresholds:
+  max_rouge_l_drop: 2.0        # max acceptable ROUGE-L drop vs best fine-tuned
+  max_rouge_1_drop: 2.0        # max acceptable ROUGE-1 drop vs best fine-tuned
+  max_latency_regression_pct: 20  # max % p50 tok/s regression vs FP16
+  target_memory_reduction_pct: 50 # target VRAM reduction for quantized models
+
+output:
+  predictions_dir: outputs/predictions
+  reports_dir: outputs/reports
+  num_qualitative_samples: 20   # number of example outputs to save per run

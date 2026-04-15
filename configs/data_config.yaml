@@ -1,0 +1,13 @@
+dataset:
+  name: cnn_dailymail
+  config: "3.0.0"
+  input_field: article
+  target_field: highlights
+  train_split: "train[:10000]"
+  val_split: "validation[:1000]"
+  test_split: "test[:1000]"
+
+preprocessing:
+  max_input_length: 1024
+  max_target_length: 256
+  prompt_template: "Summarize the following article:\n\n{article}\n\nSummary:"
