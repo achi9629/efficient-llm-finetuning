@@ -4,8 +4,8 @@ dataset:
   input_field: article
   target_field: highlights
   train_split: "train[:10000]"
-  val_split: "validation[:1000]"
-  test_split: "test[:1000]"
+  val_split: "validation[:200]"
+  test_split: "test[:200]"
 
 preprocessing:
   max_input_length: 1024

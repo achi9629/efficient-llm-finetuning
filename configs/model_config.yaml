@@ -1,10 +1,10 @@
 model:
-  name: mistralai/Mistral-7B-v0.3
+  name: assets/models/Mistral-7B-v0.3
   torch_dtype: float16
-  device_map: auto
+  device_map: cuda:1 # auto, cuda:0, cpu
   trust_remote_code: false
 
 tokenizer:
-  name: mistralai/Mistral-7B-v0.3
+  name: assets/models/Mistral-7B-v0.3
   padding_side: left
   max_length: 1280  # input + target

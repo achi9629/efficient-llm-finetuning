@@ -1,0 +1,20 @@
+__pycache__/
+.vscode/
+.vscode/settings.json
+*.pyc
+.pytest_cache/
+profiler_trace.json
+*.egg-info/
+
+notebooks/
+Mistral-7B-v0.3/
+cnn_dailymail/
+.ipynb_checkpoints/
+*.bin
+*.safetensors
+
+# Markdown files
+career_strategy.md
+git_commands.md
+progress.md
+

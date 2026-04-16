@@ -11,10 +11,17 @@ evaluation:
     no_repeat_ngram_size: 3
     temperature: 1.0
     do_sample: false
-
-  splits:
-    val: 1000
-    test: 1000
+  perf:
+    latency:
+      num_samples: 50
+      warmup_runs: 10
+      modes:
+        - name: greedy
+          num_beams: 1
+          measure_ttft: true
+        - name: beam_search
+          num_beams: 4
+          measure_ttft: false
 
   batch_size: 8
 

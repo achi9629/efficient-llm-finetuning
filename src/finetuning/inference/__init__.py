@@ -1,0 +1,1 @@
+from .infer_base import load_model_and_tokenizer

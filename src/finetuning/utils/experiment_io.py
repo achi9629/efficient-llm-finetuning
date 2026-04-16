@@ -49,7 +49,8 @@ def load_config(config_path: str) -> dict:
     
 def save_metrics(run_name: str, 
                  metrics: dict, 
-                 output_dir: str = "outputs/reports"
+                 output_dir: str,
+                 suffix: str = "metrics",
     ) -> Path:
     
     '''
@@ -67,14 +68,14 @@ def save_metrics(run_name: str,
     
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / f"{run_name}_metrics.json"
+    out_path = output_dir / f"{run_name}_{suffix}.json"
     with open(out_path, "w") as f:
         json.dump({"run_name": run_name, "timestamp": datetime.now().isoformat(), **metrics}, f, indent=2,)
     return out_path
 
 def save_predictions(run_name: str, 
                      predictions: list[dict], 
-                     output_dir: str = "outputs/predictions"
+                     output_dir: str,
     ) -> Path:
     
     '''

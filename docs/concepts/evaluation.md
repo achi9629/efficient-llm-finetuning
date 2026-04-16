@@ -46,6 +46,7 @@ Measured via timed generation over the test split with batch size = 1.
 | Metric                   | How Measured                                  | Go/No-Go Threshold                |
 |--------------------------|-----------------------------------------------|-----------------------------------|
 | Tokens/sec (p50)         | `time.perf_counter` around `model.generate()` | ≤ 20% regression vs FP16 baseline |
+| Tokens/sec (p90)         | Same                                          | Report only                       |
 | Tokens/sec (p95)         | Same                                          | Report only                       |
 | Time-to-first-token (ms) | Time from call to first token                 | Report only                       |
 
