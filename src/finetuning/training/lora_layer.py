@@ -250,7 +250,9 @@ def load_lora_weights(model: AutoModelForCausalLM,
     model = inject_lora(model, target_modules, r, alpha, dropout)
     for name, module in model.named_modules():
         if isinstance(module, LoRALinear):
-            module.lora_A.data.copy_(state_dict[f"{name}.lora_A"])
-            module.lora_B.data.copy_(state_dict[f"{name}.lora_B"])
+            _, child_name = name.rsplit('.', 1) if '.' in name else ('', name)
+            if child_name in target_modules:
+                module.lora_A.data.copy_(state_dict[f"{name}.lora_A"])
+                module.lora_B.data.copy_(state_dict[f"{name}.lora_B"])
     
     return model

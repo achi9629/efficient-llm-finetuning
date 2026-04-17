@@ -1,0 +1,2 @@
+# test_lora_layer
+PYTHONPATH=src python -W ignore::DeprecationWarning -m pytest tests/test_lora_layer.py -v --log-cli-level=INFO
