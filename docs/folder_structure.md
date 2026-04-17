@@ -37,7 +37,9 @@ efficient-llm-finetuning/
 │       │   └── calibration_sampler.py # representative set builder for PTQ
 │       ├── training/
 │       │   ├── __init__.py
-│       │   ├── train_lora.py          # LoRA training entrypoint
+│       │   ├── train_lora.py          # From Scratch LoRA training entrypoint
+│       │   ├── lora_layers.py         # From Scratch LoRALinear class implementation
+│       │   ├── train_lora_peft.py     # LoRA training entrypoint
 │       │   ├── train_qlora.py         # QLoRA training entrypoint
 │       │   ├── train_qat.py           # selective-QAT training entrypoint
 │       │   ├── trainer_utils.py       # optimizer/scheduler/seed/checkpoint helpers
