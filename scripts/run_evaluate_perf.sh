@@ -5,6 +5,8 @@ set -e # exit on error
 cd "$(dirname "$0")/.." # change to project root
 
 echo "=== Running base model inference ==="
-CUDA_VISIBLE_DEVICES=1 python -m src.finetuning.evaluation.evaluate_perf
-
+# CUDA_VISIBLE_DEVICES=0 python -m src.finetuning.evaluation.evaluate_perf \
+#     --adapter_type lora_scratch
+CUDA_VISIBLE_DEVICES=0 python -m src.finetuning.evaluation.evaluate_perf \
+    --adapter_type lora_peft
 echo "=== Done ==="

@@ -1,4 +1,6 @@
-import evaluate, json
+import json
+import argparse
+import evaluate
 from tqdm import tqdm
 from pathlib import Path
 
@@ -80,6 +82,10 @@ def evaluate_from_file(preds_path: str) -> dict:
 
 def main():
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft"], required=True)
+    args = parser.parse_args()
+    
     eval_config = load_config('configs/eval_config.yaml')
 
     metric_keys = eval_config['evaluation']['metrics']
@@ -87,7 +93,7 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     # Find latest predictions file
-    preds_files = sorted(Path(predictions_dir).glob("*_preds.jsonl"))
+    preds_files = sorted(Path(predictions_dir).glob("*" + args.adapter_type + "*_preds.jsonl"))
     if not preds_files:
         raise FileNotFoundError(f"No prediction files found in {predictions_dir}")
     preds_path = preds_files[-1]  # latest

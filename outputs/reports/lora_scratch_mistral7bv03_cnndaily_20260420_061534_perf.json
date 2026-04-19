@@ -1,0 +1,20 @@
+{
+  "run_name": "lora_scratch_mistral7bv03_cnndaily_20260420_061534",
+  "timestamp": "2026-04-20T06:44:43.673650",
+  "greedy": {
+    "tok_per_sec_p50": 178.49458970405766,
+    "tok_per_sec_p90": 250.78502597620124,
+    "tok_per_sec_p95": 284.79082350795596,
+    "ttft_ms_avg": 15.467421151697636
+  },
+  "beam_search": {
+    "tok_per_sec_p50": 29.699328575251407,
+    "tok_per_sec_p90": 33.64537184519089,
+    "tok_per_sec_p95": 34.4114466277798
+  },
+  "peak_vram_gb": 14.53,
+  "current_vram_gb": 13.51,
+  "reserved_vram_gb": 15.13,
+  "model_size_gb": 13.5,
+  "param_count_billion": 7.25
+}

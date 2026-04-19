@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import argparse
 import numpy as np
 from tqdm import tqdm
 from pathlib import Path
@@ -381,6 +382,10 @@ def measure_model_size(model: AutoModelForCausalLM) -> dict:
 
 def main():
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft"], required=True)
+    args = parser.parse_args()
+    
     model_config = load_config('configs/model_config.yaml')
     data_config = load_config('configs/data_config.yaml')
     eval_config = load_config('configs/eval_config.yaml')
@@ -389,7 +394,7 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     # Find latest predictions file
-    preds_files = sorted(Path(predictions_dir).glob("*_preds.jsonl"))
+    preds_files = sorted(Path(predictions_dir).glob("*" + args.adapter_type + "*_preds.jsonl"))
     if not preds_files:
         raise FileNotFoundError(f"No prediction files found in {predictions_dir}")
     preds_path = preds_files[-1]  # latest
