@@ -70,6 +70,8 @@ efficient-llm-finetuning/
 │           ├── __init__.py
 │           ├── metrics.py             # accuracy/f1/rouge wrappers
 │           ├── memory_monitor.py      # GPU memory capture (peak and step-wise)
+│           ├── model_loader.py        # Loading model and tekenizer
+
 │           ├── speed_monitor.py       # tokens/sec or samples/sec capture
 │           └── experiment_io.py       # run IDs and artifact save/load helpers
 ├── benchmarks/

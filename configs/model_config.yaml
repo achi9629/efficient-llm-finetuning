@@ -1,7 +1,7 @@
 model:
   name: assets/models/Mistral-7B-v0.3
   torch_dtype: float16
-  device_map: cuda:1 # auto, cuda:0, cpu
+  device_map: auto # auto, cuda:0, cpu
   trust_remote_code: false
 
 tokenizer:

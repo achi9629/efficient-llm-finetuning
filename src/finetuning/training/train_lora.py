@@ -1,4 +1,5 @@
 import os
+import logging
 from functools import partial
 from datasets import load_dataset, Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, \
@@ -7,6 +8,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments,
 from ..utils import load_model_and_tokenizer
 from ..utils.experiment_io import load_config
 from .lora_layer import inject_lora, save_lora_weights
+from .callbacks import GPUMemoryCallback
 
 
 def tokenize_fn(sample: dict,
@@ -231,12 +233,14 @@ def train(model: AutoModelForCausalLM,
     training_config = train_lora['training']
     args = TrainingArguments(**training_config)
     data_collator = DataCollatorForSeq2Seq(tokenizer, padding = True)
+    avg_seq_len = sum(len(x['input_ids']) for x in train_dataset) / len(train_dataset)
     
     trainer = Trainer(model = model,
                       args = args,              
                       train_dataset = train_dataset,
                       eval_dataset = valid_dataset,
-                      data_collator = data_collator
+                      data_collator = data_collator,
+                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len)],
                 )
     
     trainer.train()
@@ -245,6 +249,16 @@ def train(model: AutoModelForCausalLM,
     save_lora_weights(model = model, save_path = save_path)
     
 def main():
+    
+    os.makedirs("outputs/runs/lora", exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(),                                    # console
+            logging.FileHandler("outputs/runs/lora/training.log"),      # file
+        ]
+    )
     
     model_config = load_config('configs/model_config.yaml')
     data_config = load_config('configs/data_config.yaml')
@@ -255,7 +269,10 @@ def main():
     
     # During training, we will pad on the right side to ensure that the loss is correctly 
     # calculated on the target tokens, which are at the end of the sequence.
-    tokenizer.padding_side = "right" 
+    tokenizer.padding_side = "right"
+    # Set a very large max_length to avoid truncation by the tokenizer, 
+    # since we will handle it in our tokenize_fn with separate budgets for prompt and target.
+    tokenizer.model_max_length = 100_000 
     
     train_dataset, valid_dataset = prepare_dataset(tokenizer, data_config)
     model = build_lora_model(model, train_lora)

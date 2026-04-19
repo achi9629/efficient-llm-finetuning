@@ -7,6 +7,8 @@ lora:
 
 training:
   output_dir: outputs/checkpoints/lora
+  logging_dir: outputs/runs/lora
+  report_to: tensorboard    
   num_train_epochs: 3
   per_device_train_batch_size: 4
   gradient_accumulation_steps: 4
