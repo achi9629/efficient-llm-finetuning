@@ -1,7 +1,7 @@
 import time
 import torch
 import logging
-from transformers import TrainerCallback, TrainingArguments
+from transformers import TrainerCallback
 
 logger = logging.getLogger(__name__)
 

@@ -9,6 +9,8 @@ profiler_trace.json
 notebooks/
 Mistral-7B-v0.3/
 cnn_dailymail/
+checkpoints/
+runs/
 .ipynb_checkpoints/
 *.bin
 *.safetensors

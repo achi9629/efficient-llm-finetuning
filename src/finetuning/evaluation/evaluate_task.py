@@ -1,8 +1,8 @@
 import evaluate, json
-from pathlib import Path
 from tqdm import tqdm
+from pathlib import Path
 
-from src.finetuning.utils.experiment_io import load_config, generate_run_name, save_metrics
+from ..utils import load_config, save_metrics
 
 def compute_rouge(predictions: list[str], 
                   references: list[str]

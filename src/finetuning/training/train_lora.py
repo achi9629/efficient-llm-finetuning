@@ -4,11 +4,9 @@ from functools import partial
 from datasets import load_dataset, Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, \
                          Trainer, DataCollatorForSeq2Seq
-
-from ..utils import load_model_and_tokenizer
-from ..utils.experiment_io import load_config
-from .lora_layer import inject_lora, save_lora_weights
 from .callbacks import GPUMemoryCallback
+from .lora_layer import inject_lora, save_lora_weights
+from ..utils import load_model_and_tokenizer, load_config
 
 
 def tokenize_fn(sample: dict,

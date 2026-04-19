@@ -8,8 +8,7 @@ from threading import Thread
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
-from ..utils.model_loader import load_model_and_tokenizer
-from ..utils.experiment_io import load_config, save_metrics
+from ..utils import load_model_and_tokenizer, save_metrics, load_config
 
 def run_single_generation(model: AutoModelForCausalLM,
                           tokenizer: AutoTokenizer,
