@@ -16,5 +16,5 @@ training:
   bf16: true
   logging_steps: 10
   save_strategy: epoch
-  evaluation_strategy: epoch
+  eval_strategy: epoch
   seed: 42

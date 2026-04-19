@@ -39,7 +39,7 @@ All original weights are frozen. No gradients flow through them during training.
 
 For each target layer (typically attention projections), add two small matrices A and B:
 
-```
+```bash
 Input x
 |
 |---> [Frozen W] ---> Wx

@@ -8,8 +8,8 @@ from threading import Thread
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
-from src.finetuning.utils.experiment_io import load_config, save_metrics
-from src.finetuning.inference.infer_base import load_model_and_tokenizer
+from ..utils.model_loader import load_model_and_tokenizer
+from ..utils.experiment_io import load_config, save_metrics
 
 def run_single_generation(model: AutoModelForCausalLM,
                           tokenizer: AutoTokenizer,
@@ -397,6 +397,7 @@ def main():
     run_name = preds_path.stem.replace("_preds", "")
     
     model, tokenizer = load_model_and_tokenizer(model_config)
+    model.eval()
     
     metrics = {}
     
