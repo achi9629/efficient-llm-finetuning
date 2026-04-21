@@ -1,4 +1,5 @@
 import os
+import logging
 from peft import LoraConfig, get_peft_model
 from transformers import Trainer, TrainingArguments, DataCollatorForSeq2Seq
 
@@ -7,6 +8,16 @@ from .callbacks import GPUMemoryCallback
 from ..utils import load_config, load_model_and_tokenizer
 
 def main():
+    
+    os.makedirs("outputs/runs/lora_peft", exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(),                                    # console
+            logging.FileHandler("outputs/runs/lora_peft/training.log"),      # file
+        ]
+    )
     
     model_config = load_config('configs/model_config.yaml')
     data_config = load_config('configs/data_config.yaml')
