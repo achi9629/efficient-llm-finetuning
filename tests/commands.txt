@@ -3,3 +3,6 @@ PYTHONPATH=src python -W ignore::DeprecationWarning -m pytest tests/test_lora_la
 
 # test_train_qlora_smoke
 CUDA_VISIBLE_DEVICES=3 PYTHONPATH=src python -W ignore::DeprecationWarning -m pytest tests/test_train_qlora_smoke.py -v --log-cli-level=INFO
+
+# test_train_lora_smoke
+CUDA_VISIBLE_DEVICES=3 PYTHONPATH=src python -W ignore::DeprecationWarning -m pytest tests/test_train_lora_smoke.py -v --log-cli-level=INFO
