@@ -248,19 +248,27 @@ def train(model: AutoModelForCausalLM,
     
 def main():
     
-    os.makedirs("outputs/runs/lora", exist_ok=True)
+    model_config = load_config('configs/model_config.yaml')
+    data_config = load_config('configs/data_config.yaml')
+    train_lora = load_config('configs/train_lora.yaml')
+    
+    r = train_lora['lora']['r']
+    alpha = train_lora['lora']['lora_alpha']
+    lr = train_lora['training']['learning_rate']
+    tag = f"lora_r{r}_a{alpha}_lr{lr}"
+    
+    train_lora['training']['output_dir'] = f'outputs/checkpoints/{tag}'
+    train_lora['training']['logging_dir'] = f'outputs/runs/{tag}'
+    
+    os.makedirs(f'outputs/runs/{tag}', exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         handlers=[
             logging.StreamHandler(),                                    # console
-            logging.FileHandler("outputs/runs/lora/training.log"),      # file
+            logging.FileHandler(os.path.join(f'outputs/runs/{tag}', "training.log")),      # file
         ]
     )
-    
-    model_config = load_config('configs/model_config.yaml')
-    data_config = load_config('configs/data_config.yaml')
-    train_lora = load_config('configs/train_lora.yaml')
     
     model, tokenizer = load_model_and_tokenizer(model_config)
     model.train()

@@ -7,11 +7,14 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments,
 from peft import prepare_model_for_kbit_training
 
 from ..utils import load_config
-from .callbacks import GPUMemoryCallback
-from .lora_layer import inject_lora, save_lora_weights
 from .train_lora import prepare_dataset
+from .lora_layer import inject_lora, save_lora_weights
+from .callbacks import GPUMemoryCallback, QLoRACheckpointCallback
 
-def load_qlora_model_and_tokenizer(model_config: dict, train_qlora: dict):
+def load_qlora_model_and_tokenizer(model_config: dict, 
+                                   train_qlora: dict,
+                                   use_gradient_checkpointing: bool = True
+        ) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     
     dtype_map = {"float16": torch.float16, 
                  "bfloat16": torch.bfloat16, 
@@ -41,7 +44,8 @@ def load_qlora_model_and_tokenizer(model_config: dict, train_qlora: dict):
                                                  trust_remote_code = trust_remote_code,
                 )
     
-    model = prepare_model_for_kbit_training(model)
+    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing = use_gradient_checkpointing)
+    # model.gradient_checkpointing_disable() # Disable gradient checkpointing for 4-bit models to avoid issues with the custom LoRA implementation
     
     tokenizer = AutoTokenizer.from_pretrained(token_name, 
                                               padding_side = padding_side, 
@@ -99,6 +103,13 @@ def build_qlora_model(model: AutoModelForCausalLM,
                         dropout = dropout
             )
     
+    
+    '''
+    Since we are using custom code to inject LoRA layers, we need to set a flag 
+    on the model to indicate that the PEFT config has been loaded. 
+    '''
+    model._hf_peft_config_loaded = True
+    
     return model
 
 def train(model: AutoModelForCausalLM,
@@ -129,15 +140,17 @@ def train(model: AutoModelForCausalLM,
     
     training_config = train_qlora['training']
     args = TrainingArguments(**training_config)
+    args.save_strategy = "no"  # We will handle saving LoRA weights manually, so disable the default saving mechanism
     data_collator = DataCollatorForSeq2Seq(tokenizer, padding = True)
     avg_seq_len = sum(len(x['input_ids']) for x in train_dataset) / len(train_dataset)
-    
+
     trainer = Trainer(model = model,
                       args = args,              
                       train_dataset = train_dataset,
                       eval_dataset = valid_dataset,
                       data_collator = data_collator,
-                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len)],
+                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len),
+                                   QLoRACheckpointCallback()],
                 )
     
     trainer.train()
@@ -147,21 +160,30 @@ def train(model: AutoModelForCausalLM,
 
 def main():
     
-    os.makedirs("outputs/runs/qlora", exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[
-            logging.StreamHandler(),                                    # console
-            logging.FileHandler("outputs/runs/qlora/training.log"),      # file
-        ]
-    )
-    
     model_config = load_config('configs/model_config.yaml')
     data_config = load_config('configs/data_config.yaml')
     train_qlora = load_config('configs/train_qlora.yaml')
     
-    model, tokenizer = load_qlora_model_and_tokenizer(model_config, train_qlora)
+    r = train_qlora['lora']['r']
+    alpha = train_qlora['lora']['lora_alpha']
+    lr = train_qlora['training']['learning_rate']
+    use_gradient_checkpointing = True
+    tag = f"qlora_r{r}_a{alpha}_lr{lr}" if not use_gradient_checkpointing else f"qlora_r{r}_a{alpha}_lr{lr}_gc" 
+    
+    train_qlora['training']['output_dir'] = f'outputs/checkpoints/{tag}'
+    train_qlora['training']['logging_dir'] = f'outputs/runs/{tag}'
+    
+    os.makedirs(f'outputs/runs/{tag}', exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(),                                  
+            logging.FileHandler(os.path.join(f'outputs/runs/{tag}', "training.log")),
+        ]
+    )
+      
+    model, tokenizer = load_qlora_model_and_tokenizer(model_config, train_qlora, use_gradient_checkpointing)
     
     # During training, we will pad on the right side to ensure that the loss is correctly 
     # calculated on the target tokens, which are at the end of the sequence.

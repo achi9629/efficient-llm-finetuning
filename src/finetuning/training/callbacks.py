@@ -1,9 +1,50 @@
+import os
 import time
 import torch
+import random
 import logging
+import numpy as np
 from transformers import TrainerCallback
 
+from .lora_layer import save_lora_weights
+
 logger = logging.getLogger(__name__)
+
+class QLoRACheckpointCallback(TrainerCallback):
+
+    def on_epoch_end(self, args, state, control, model=None, optimizer=None, lr_scheduler=None, **kwargs):
+        
+        ckpt_dir = os.path.join(args.output_dir, args.checkpoint_name, f"checkpoint-{state.global_step}")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        
+        # 1. LoRA adapter weights
+        save_lora_weights(model=model, save_path=os.path.join(ckpt_dir, "lora_adapter.pt"))
+        
+        # 2. Optimizer state
+        if optimizer is not None:
+            torch.save(optimizer.state_dict(), os.path.join(ckpt_dir, "optimizer.pt"))
+        
+        # 3. Scheduler state
+        if lr_scheduler is not None:
+            torch.save(lr_scheduler.state_dict(), os.path.join(ckpt_dir, "scheduler.pt"))
+        
+        # 4. RNG states (for exact reproducibility on resume)
+        rng_states = {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "cpu": torch.random.get_rng_state(),
+        }
+        if torch.cuda.is_available():
+            rng_states["cuda"] = torch.cuda.get_rng_state_all()
+        torch.save(rng_states, os.path.join(ckpt_dir, "rng_state.pth"))
+        
+        # 5. Trainer state (global_step, epoch, best_metric, log_history, etc.)
+        state.save_to_json(os.path.join(ckpt_dir, "trainer_state.json"))
+        
+        # 6. Training args
+        torch.save(args, os.path.join(ckpt_dir, "training_args.bin"))
+        
+        logger.info(f"QLoRA checkpoint saved to {ckpt_dir}")
 
 class GPUMemoryCallback(TrainerCallback):
     
