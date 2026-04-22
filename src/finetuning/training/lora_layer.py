@@ -48,8 +48,9 @@ class LoRALinear(nn.Module):
         self.dropout_val = dropout
         
         # Initialize the low-rank matrices
-        self.lora_A = nn.Parameter(torch.empty(self.r, self.original_linear.in_features))
-        self.lora_B = nn.Parameter(torch.zeros(self.original_linear.out_features, self.r))
+        device = self.original_linear.weight.device
+        self.lora_A = nn.Parameter(torch.empty(self.r, self.original_linear.in_features, device = device))
+        self.lora_B = nn.Parameter(torch.zeros(self.original_linear.out_features, self.r, device = device))
         self.dropout = nn.Dropout(dropout)
         
         # Apply Kaiming uniform initialization
