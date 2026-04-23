@@ -16,6 +16,37 @@ def load_qlora_model_and_tokenizer(model_config: dict,
                                    use_gradient_checkpointing: bool = True
         ) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
     
+    """
+    Description:
+        Load a quantized language model and tokenizer with QLoRA configuration.
+        This function initializes a causal language model using 4-bit quantization
+        via BitsAndBytes and prepares it for efficient fine-tuning with QLoRA.
+        It also loads and configures the corresponding tokenizer.
+    Args:
+        model_config (dict): Configuration dictionary containing model and tokenizer settings.
+            Expected keys:
+            - model.name (str): HuggingFace model identifier
+            - model.trust_remote_code (bool): Whether to trust remote code from the model repo
+            - tokenizer.name (str): HuggingFace tokenizer identifier
+            - tokenizer.padding_side (str): Padding side ('left' or 'right')
+            - tokenizer.max_length (int): Maximum sequence length
+        train_qlora (dict): QLoRA training configuration dictionary.
+            Expected keys:
+            - quantization.load_in_4bit (bool): Whether to load model in 4-bit
+            - quantization.bnb_4bit_quant_type (str): Quantization type ('nf4' or 'fp4')
+            - quantization.bnb_4bit_use_double_quant (bool): Whether to use double quantization
+            - quantization.bnb_4bit_compute_dtype (str): Compute dtype ('float16', 'bfloat16', or 'float32')
+        use_gradient_checkpointing (bool, optional): Whether to enable gradient checkpointing
+            for memory efficiency. Defaults to True.
+    Returns:
+        tuple[AutoModelForCausalLM, AutoTokenizer]: A tuple containing:
+            - model: 4-bit quantized causal language model prepared for training
+            - tokenizer: Configured tokenizer with pad token set to eos_token
+    Note:
+        The tokenizer's pad_token is automatically set to eos_token to handle models
+        like Mistral that don't have a default pad token.
+    """
+    
     dtype_map = {"float16": torch.float16, 
                  "bfloat16": torch.bfloat16, 
                  "float32": torch.float32}
@@ -167,7 +198,7 @@ def main():
     r = train_qlora['lora']['r']
     alpha = train_qlora['lora']['lora_alpha']
     lr = train_qlora['training']['learning_rate']
-    use_gradient_checkpointing = True
+    use_gradient_checkpointing = False
     tag = f"qlora_r{r}_a{alpha}_lr{lr}" if not use_gradient_checkpointing else f"qlora_r{r}_a{alpha}_lr{lr}_gc" 
     
     train_qlora['training']['output_dir'] = f'outputs/checkpoints/{tag}'

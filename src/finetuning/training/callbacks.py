@@ -14,7 +14,7 @@ class QLoRACheckpointCallback(TrainerCallback):
 
     def on_epoch_end(self, args, state, control, model=None, optimizer=None, lr_scheduler=None, **kwargs):
         
-        ckpt_dir = os.path.join(args.output_dir, args.checkpoint_name, f"checkpoint-{state.global_step}")
+        ckpt_dir = os.path.join(args.output_dir, f"checkpoint-{state.global_step}")
         os.makedirs(ckpt_dir, exist_ok=True)
         
         # 1. LoRA adapter weights
@@ -45,6 +45,11 @@ class QLoRACheckpointCallback(TrainerCallback):
         torch.save(args, os.path.join(ckpt_dir, "training_args.bin"))
         
         logger.info(f"QLoRA checkpoint saved to {ckpt_dir}")
+     
+    def on_evaluate(self, args, state, control, **kwargs):
+        ckpt_dir = os.path.join(args.output_dir, f"checkpoint-{state.global_step}")
+        if os.path.exists(ckpt_dir):
+            state.save_to_json(os.path.join(ckpt_dir, "trainer_state.json"))
 
 class GPUMemoryCallback(TrainerCallback):
     

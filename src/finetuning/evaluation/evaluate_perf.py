@@ -383,7 +383,11 @@ def measure_model_size(model: AutoModelForCausalLM) -> dict:
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft"], required=True)
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora"], required=True)
+    parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
+    parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")
+    
     args = parser.parse_args()
     
     model_config = load_config('configs/model_config.yaml')
@@ -393,8 +397,14 @@ def main():
     predictions_dir = eval_config['output']['predictions_dir']
     reports_dir = eval_config['output']['reports_dir']
     
+    adapter_type = args.adapter_type
+    r = args.r
+    alpha = args.alpha
+    lr = args.lr
+    tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}"
+    
     # Find latest predictions file
-    preds_files = sorted(Path(predictions_dir).glob("*" + args.adapter_type + "*_preds.jsonl"))
+    preds_files = sorted(Path(predictions_dir).glob("*" + tag + "*_preds.jsonl"))
     if not preds_files:
         raise FileNotFoundError(f"No prediction files found in {predictions_dir}")
     preds_path = preds_files[-1]  # latest

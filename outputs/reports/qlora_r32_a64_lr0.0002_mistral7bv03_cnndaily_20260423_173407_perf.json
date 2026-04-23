@@ -1,0 +1,20 @@
+{
+  "run_name": "qlora_r32_a64_lr0.0002_mistral7bv03_cnndaily_20260423_173407",
+  "timestamp": "2026-04-23T20:15:28.610770",
+  "greedy": {
+    "tok_per_sec_p50": 129.08526916104427,
+    "tok_per_sec_p90": 174.16125729137383,
+    "tok_per_sec_p95": 194.81568229832638,
+    "ttft_ms_avg": 16.089672036468983
+  },
+  "beam_search": {
+    "tok_per_sec_p50": 15.433454306106846,
+    "tok_per_sec_p90": 16.840308266945623,
+    "tok_per_sec_p95": 17.147407292891078
+  },
+  "peak_vram_gb": 14.53,
+  "current_vram_gb": 13.51,
+  "reserved_vram_gb": 15.13,
+  "model_size_gb": 13.5,
+  "param_count_billion": 7.25
+}
