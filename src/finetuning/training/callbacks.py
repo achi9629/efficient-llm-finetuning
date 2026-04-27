@@ -1,9 +1,11 @@
 import os
+import json
 import time
 import torch
 import random
 import logging
 import numpy as np
+from datetime import datetime
 from transformers import TrainerCallback
 
 from .lora_layer import save_lora_weights
@@ -94,11 +96,35 @@ class GPUMemoryCallback(TrainerCallback):
         
         total_time = time.time() - self.start_time
         peak_memory_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
+        current_vram_gb = torch.cuda.memory_allocated() / (1024 ** 3)
+        reserved_vram_gb = torch.cuda.memory_reserved() / (1024 ** 3)
         total_samples = (state.global_step * \
                          args.per_device_train_batch_size * \
                          args.gradient_accumulation_steps * \
                          args.world_size)
         avg_throughput = total_samples / total_time
+        tokens_per_sec = avg_throughput * self.avg_seq_len if self.avg_seq_len else None
+        
+        # Store as attributes for external access
+        self.training_summary = {
+            "timestamp": datetime.now().isoformat(),
+            "total_time_sec": round(total_time, 1),
+            "total_time_min": round(total_time / 60, 2),
+            "peak_train_vram_gb": round(peak_memory_gb, 2),
+            "current_vram_gb": round(current_vram_gb, 2),
+            "reserved_vram_gb": round(reserved_vram_gb, 2),
+            "total_samples": total_samples,
+            "total_steps": state.global_step,
+            "avg_samples_per_sec": round(avg_throughput, 2),
+            "avg_tokens_per_sec": round(tokens_per_sec, 1) if tokens_per_sec else None,
+            "avg_seq_len": round(self.avg_seq_len, 1) if self.avg_seq_len else None,
+            "batch_size": args.per_device_train_batch_size,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "num_epochs": args.num_train_epochs,
+            "learning_rate": args.learning_rate,
+            "fp16": args.fp16,
+            "bf16": args.bf16,
+        }
         
         summary = (
             f"\n{'=' * 60}\n"
@@ -111,3 +137,17 @@ class GPUMemoryCallback(TrainerCallback):
             f"{'=' * 60}\n"
         )
         logger.info(summary)
+    
+    def save_training_report(self, output_dir: str, run_name: str) -> str:
+        """Save training metrics to a JSON report file."""
+        if not hasattr(self, 'training_summary'):
+            logger.warning("No training summary available. Was on_train_end called?")
+            return None
+        
+        report = {"run_name": run_name, **self.training_summary}
+        report_path = os.path.join(output_dir, f"{run_name}_train_perf.json")
+        os.makedirs(output_dir, exist_ok=True)
+        with open(report_path, 'w') as f:
+            json.dump(report, f, indent=2)
+        logger.info(f"Training report saved to {report_path}")
+        return report_path

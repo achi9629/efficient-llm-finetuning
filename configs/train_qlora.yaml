@@ -4,9 +4,10 @@ quantization:
   bnb_4bit_compute_dtype: bfloat16
   bnb_4bit_use_double_quant: true
 
+# From rank_sweep.csv, r = 2, lora_alpha = 4, ROUGE-L = 0.2013 is the best combination for 4-bit quantization.
 lora:
-  r: 64 # 2, 4, 8, 16, 32, 64
-  lora_alpha: 128 # 4, 8, 16, 32, 64, 128
+  r: 2 # 2, 4, 8, 16, 32, 64
+  lora_alpha: 4 # 4, 8, 16, 32, 64, 128
   lora_dropout: 0.05
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
   task_type: CAUSAL_LM
