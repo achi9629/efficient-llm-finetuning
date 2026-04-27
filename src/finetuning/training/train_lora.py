@@ -1,6 +1,7 @@
 import os
 import logging
 from functools import partial
+from datetime import datetime
 from datasets import load_dataset, Dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, \
                          Trainer, DataCollatorForSeq2Seq
@@ -233,12 +234,14 @@ def train(model: AutoModelForCausalLM,
     data_collator = DataCollatorForSeq2Seq(tokenizer, padding = True)
     avg_seq_len = sum(len(x['input_ids']) for x in train_dataset) / len(train_dataset)
     
+    gpu_cb = GPUMemoryCallback(avg_seq_len = avg_seq_len)
+    
     trainer = Trainer(model = model,
                       args = args,              
                       train_dataset = train_dataset,
                       eval_dataset = valid_dataset,
                       data_collator = data_collator,
-                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len)],
+                      callbacks = [gpu_cb],
                 )
     
     trainer.train()
@@ -247,11 +250,8 @@ def train(model: AutoModelForCausalLM,
     save_lora_weights(model = model, save_path = save_path)
     
     # Save training performance report
-    gpu_cb = next((cb for cb in trainer.callback_handler.callbacks 
-                   if isinstance(cb, GPUMemoryCallback)), None)
-    if gpu_cb is not None:
-        run_name = os.path.basename(training_config['output_dir'])
-        gpu_cb.save_training_report("outputs/reports", run_name)
+    run_name = os.path.basename(training_config['output_dir'])
+    gpu_cb.save_training_report(training_config['output_dir'], run_name)
     
 def main():
     
@@ -262,7 +262,8 @@ def main():
     r = train_lora['lora']['r']
     alpha = train_lora['lora']['lora_alpha']
     lr = train_lora['training']['learning_rate']
-    tag = f"lora_r{r}_a{alpha}_lr{lr}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tag = f"lora_r{r}_a{alpha}_lr{lr}_{timestamp}"
     
     train_lora['training']['output_dir'] = f'outputs/checkpoints/{tag}'
     train_lora['training']['logging_dir'] = f'outputs/runs/{tag}'

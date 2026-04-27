@@ -88,6 +88,11 @@ class GPUMemoryCallback(TrainerCallback):
         peak_memory_gb = torch.cuda.max_memory_allocated() / (1024 ** 3)
         logs["peak_gpu_memory_gb"] = round(peak_memory_gb, 2)
         
+        # Persist custom metrics into log_history (Trainer copies logs before on_log)
+        if state.log_history:
+            state.log_history[-1].update({k: v for k, v in logs.items() 
+                                        if k not in state.log_history[-1]})
+        
         
         self.last_log_time = current_time
         self.last_log_step = state.global_step

@@ -2,6 +2,7 @@ import os
 import torch
 import logging
 from datasets import Dataset
+from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer, \
                          DataCollatorForSeq2Seq, BitsAndBytesConfig
 from peft import prepare_model_for_kbit_training
@@ -174,13 +175,15 @@ def train(model: AutoModelForCausalLM,
     args.save_strategy = "no"  # We will handle saving LoRA weights manually, so disable the default saving mechanism
     data_collator = DataCollatorForSeq2Seq(tokenizer, padding = True)
     avg_seq_len = sum(len(x['input_ids']) for x in train_dataset) / len(train_dataset)
+    
+    gpu_cb = GPUMemoryCallback(avg_seq_len = avg_seq_len)
 
     trainer = Trainer(model = model,
                       args = args,              
                       train_dataset = train_dataset,
                       eval_dataset = valid_dataset,
                       data_collator = data_collator,
-                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len),
+                      callbacks = [gpu_cb,
                                    QLoRACheckpointCallback()],
                 )
     
@@ -190,11 +193,8 @@ def train(model: AutoModelForCausalLM,
     save_lora_weights(model = model, save_path = save_path)
     
     # Save training performance report
-    gpu_cb = next((cb for cb in trainer.callback_handler.callbacks 
-                   if isinstance(cb, GPUMemoryCallback)), None)
-    if gpu_cb is not None:
-        run_name = os.path.basename(training_config['output_dir'])
-        gpu_cb.save_training_report("outputs/reports", run_name)
+    run_name = os.path.basename(training_config['output_dir'])
+    gpu_cb.save_training_report(training_config['output_dir'], run_name)
 
 def main():
     
@@ -205,8 +205,9 @@ def main():
     r = train_qlora['lora']['r']
     alpha = train_qlora['lora']['lora_alpha']
     lr = train_qlora['training']['learning_rate']
-    use_gradient_checkpointing = False
-    tag = f"qlora_r{r}_a{alpha}_lr{lr}" if not use_gradient_checkpointing else f"qlora_r{r}_a{alpha}_lr{lr}_gc" 
+    use_gradient_checkpointing = True
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tag = f"qlora_r{r}_a{alpha}_lr{lr}_{timestamp}" if not use_gradient_checkpointing else f"qlora_r{r}_a{alpha}_lr{lr}_gc_{timestamp}" 
     
     train_qlora['training']['output_dir'] = f'outputs/checkpoints/{tag}'
     train_qlora['training']['logging_dir'] = f'outputs/runs/{tag}'

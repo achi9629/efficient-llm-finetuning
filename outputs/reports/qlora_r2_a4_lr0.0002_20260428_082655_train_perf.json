@@ -1,0 +1,20 @@
+{
+  "run_name": "qlora_r2_a4_lr0.0002_20260428_082655",
+  "timestamp": "2026-04-28T08:36:30.868426",
+  "total_time_sec": 552.2,
+  "total_time_min": 9.2,
+  "peak_train_vram_gb": 45.46,
+  "current_vram_gb": 4.39,
+  "reserved_vram_gb": 11.06,
+  "total_samples": 1600,
+  "total_steps": 100,
+  "avg_samples_per_sec": 2.9,
+  "avg_tokens_per_sec": 2427.3,
+  "avg_seq_len": 837.6,
+  "batch_size": 4,
+  "gradient_accumulation_steps": 4,
+  "num_epochs": 1,
+  "learning_rate": 0.0002,
+  "fp16": false,
+  "bf16": true
+}

@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from peft import LoraConfig, get_peft_model
 from transformers import Trainer, TrainingArguments, DataCollatorForSeq2Seq
 
@@ -16,7 +17,8 @@ def main():
     r = train_lora['lora']['r']
     alpha = train_lora['lora']['lora_alpha']
     lr = train_lora['training']['learning_rate']
-    tag = f"lora_peft_r{r}_a{alpha}_lr{lr}"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tag = f"lora_peft_r{r}_a{alpha}_lr{lr}_{timestamp}"
     
     train_lora['training']['output_dir'] = f'outputs/checkpoints/{tag}'
     train_lora['training']['logging_dir'] = f'outputs/runs/{tag}'
@@ -53,17 +55,23 @@ def main():
     training_config = train_lora['training']
     args = TrainingArguments(**training_config)
     
+    gpu_cb = GPUMemoryCallback(avg_seq_len = avg_seq_len)
+    
     trainer = Trainer(model = model,
                       args = args,              
                       train_dataset = train_dataset,
                       eval_dataset = valid_dataset,
                       data_collator = data_collator,
-                      callbacks = [GPUMemoryCallback(avg_seq_len = avg_seq_len)],
+                      callbacks = [gpu_cb],
                 )
     trainer.train()
     
     # Save the fine-tuned model and tokenizer to the specified output directory
     model.save_pretrained(training_config['output_dir'])
+    
+    # Save training performance report
+    run_name = os.path.basename(training_config['output_dir'])
+    gpu_cb.save_training_report(training_config['output_dir'], run_name)
     
 if __name__ == "__main__":
     main()

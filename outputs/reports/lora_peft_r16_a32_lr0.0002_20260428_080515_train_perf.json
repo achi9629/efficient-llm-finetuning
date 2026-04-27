@@ -1,0 +1,20 @@
+{
+  "run_name": "lora_peft_r16_a32_lr0.0002_20260428_080515",
+  "timestamp": "2026-04-28T08:13:29.440642",
+  "total_time_sec": 470.7,
+  "total_time_min": 7.84,
+  "peak_train_vram_gb": 56.15,
+  "current_vram_gb": 13.67,
+  "reserved_vram_gb": 72.51,
+  "total_samples": 1600,
+  "total_steps": 100,
+  "avg_samples_per_sec": 3.4,
+  "avg_tokens_per_sec": 2847.4,
+  "avg_seq_len": 837.6,
+  "batch_size": 4,
+  "gradient_accumulation_steps": 4,
+  "num_epochs": 1,
+  "learning_rate": 0.0002,
+  "fp16": false,
+  "bf16": true
+}
