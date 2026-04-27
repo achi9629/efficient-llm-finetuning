@@ -188,6 +188,13 @@ def train(model: AutoModelForCausalLM,
     
     save_path = os.path.join(training_config['output_dir'], "lora_adapter.pt")
     save_lora_weights(model = model, save_path = save_path)
+    
+    # Save training performance report
+    gpu_cb = next((cb for cb in trainer.callback_handler.callbacks 
+                   if isinstance(cb, GPUMemoryCallback)), None)
+    if gpu_cb is not None:
+        run_name = os.path.basename(training_config['output_dir'])
+        gpu_cb.save_training_report("outputs/reports", run_name)
 
 def main():
     
