@@ -23,7 +23,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### Finding 3: QLoRA's cost is hidden in throughput, not VRAM
 
-- VRAM identical across all methods: 14.53 GB
+- During inference VRAM identical across all methods: 14.53 GB
 - Greedy throughput: 25% drop (130 vs 174 tok/s)
 - Beam search: ~2x drop (15.5 vs 29.7 tok/s)
 - "QLoRA is sold as 'same quality, less memory.' In practice, you're trading latency for memory. If your deployment is latency-bound, QLoRA is the wrong choice."
