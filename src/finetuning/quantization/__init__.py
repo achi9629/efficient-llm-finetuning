@@ -1,1 +1,1 @@
-from .ptq_pipeline import load_ptq_model_and_tokenizer
+from .ptq_pipeline import load_ptq_model_and_tokenizer, quantize_gptq_and_save

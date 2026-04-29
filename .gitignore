@@ -8,6 +8,7 @@ profiler_trace.json
 
 notebooks/
 Mistral-7B-v0.3/
+GPTQ_Mistral-7B-v0.3/
 cnn_dailymail/
 checkpoints/
 runs/
