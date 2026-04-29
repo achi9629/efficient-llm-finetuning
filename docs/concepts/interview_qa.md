@@ -21,11 +21,11 @@ I built this project to answer those questions with numbers — not intuition. I
 - r=2: 0.201 → r=64: 0.180 (monotonic decrease)
 - "Rank controls capacity. If your dataset doesn't have enough signal to fill that capacity, the extra parameters fit noise. Same reason you don't use a 10-layer MLP for linear regression."
 
-### Finding 3: QLoRA's cost is hidden in throughput, not VRAM
+### Finding 3a: QLoRA saves both VRAM and training memory at a throughput cost
 
-- During inference VRAM identical across all methods: 14.53 GB
-- Greedy throughput: 25% drop (130 vs 174 tok/s)
-- Beam search: ~2x drop (15.5 vs 29.7 tok/s)
+- During inference: Base/LoRA use ~14.5 GB (FP16), QLoRA uses ~5.83 GB (4-bit) — 60% VRAM reduction
+- Greedy throughput: ~60% drop (70 vs 174 tok/s)
+- Beam search: ~3x drop (10.1 vs 29.7 tok/s)
 - "QLoRA is sold as 'same quality, less memory.' In practice, you're trading latency for memory. If your deployment is latency-bound, QLoRA is the wrong choice."
 
 ### Finding 3b: Training fit is an activation problem, not a weight problem
@@ -49,7 +49,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "Tell me about a project"
 
-"I was investigating the real cost-quality tradeoffs of LLM adaptation on a single GPU. The surprising finding was that standard choices — rank=16, QLoRA for 'efficiency' — were suboptimal. Rank=2 outperformed rank=64 by 2 ROUGE-L points because our data was small enough that higher capacity overfits. QLoRA's 'memory savings' were a mirage — VRAM was identical; the real cost was 25% throughput penalty. I built a decision framework mapping deployment constraints to method choices."
+"I was investigating the real cost-quality tradeoffs of LLM adaptation on a single GPU. The surprising finding was that standard choices — rank=16, QLoRA for 'efficiency' — were suboptimal. Rank=2 outperformed rank=64 by 2 ROUGE-L points because our data was small enough that higher capacity overfits. QLoRA delivered real inference VRAM savings (5.83 vs 14.5 GB — 60% reduction) but at a 60% throughput penalty. I built a decision framework mapping deployment constraints to method choices."
 
 ### "Why not just use PEFT?"
 
@@ -69,7 +69,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "When would you choose LoRA vs QLoRA?"
 
-"Depends on the bottleneck. If training VRAM is the constraint (fitting a 7B model on 16GB GPU), QLoRA's 4-bit base is necessary. If you have enough VRAM, LoRA gives better throughput (~25% faster) and simplifies the pipeline. On small datasets, QLoRA's implicit regularization from quantization can help — we saw this in our results. But I wouldn't generalize that claim."
+"Depends on the bottleneck. If training VRAM is the constraint (fitting a 7B model on 16GB GPU), QLoRA's 4-bit base is necessary. If you have enough VRAM, LoRA gives better throughput (~2.5x faster) and simplifies the pipeline. On small datasets, QLoRA's implicit regularization from quantization can help — we saw this in our results. But I wouldn't generalize that claim."
 
 ### "What would you do differently?"
 
@@ -91,9 +91,9 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ## Tricky Follow-ups
 
-### "Your QLoRA VRAM is the same as LoRA. Why?"
+### "How does QLoRA reduce inference VRAM vs LoRA?"
 
-"At inference time, both load the full merged FP16 model. QLoRA's VRAM savings are during training — the 4-bit base + FP16 adapters fit where FP16 base + FP16 adapters wouldn't. Our eval pipeline loads the merged model, so VRAM is identical."
+"QLoRA loads the base model in 4-bit during inference, using ~5.83 GB vs ~14.5 GB for FP16 LoRA — a 60% reduction. The adapters are merged into the quantized model, keeping the 4-bit representation. The tradeoff is ~60% lower greedy throughput (70 vs 174 tok/s) due to dequantization overhead per step."
 
 ### "Why is beam search so much slower under QLoRA?"
 

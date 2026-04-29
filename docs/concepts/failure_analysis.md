@@ -47,7 +47,7 @@ All findings are specific to Mistral-7B-v0.3 on CNN/DailyMail summarization.
 
 ## 4. QLoRA beam search throughput collapse
 
-**Observed:** Beam search throughput dropped ~2x under QLoRA (15.5 vs 29.7 tok/s) — much worse than the 25% greedy penalty.
+**Observed:** Beam search throughput dropped ~3x under QLoRA (10.1 vs 29.7 tok/s) — much worse than the 60% greedy penalty.
 
 **Expected:** Throughput penalty should be constant across decoding strategies.
 

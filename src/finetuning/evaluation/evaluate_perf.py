@@ -9,7 +9,9 @@ from threading import Thread
 from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
+from ..quantization import load_ptq_model_and_tokenizer
 from ..utils import load_model_and_tokenizer, save_metrics, load_config
+from ..training import load_qlora_model_and_tokenizer, build_qlora_model, load_lora_weights
 
 def run_single_generation(model: AutoModelForCausalLM,
                           tokenizer: AutoTokenizer,
@@ -383,7 +385,7 @@ def measure_model_size(model: AutoModelForCausalLM) -> dict:
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora"], required=True)
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", "ptq_nf4"], required=True)
     parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
     parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")
@@ -398,10 +400,13 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     adapter_type = args.adapter_type
-    r = args.r
-    alpha = args.alpha
-    lr = args.lr
-    tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}"
+    if adapter_type == "qlora":
+        r = args.r
+        alpha = args.alpha
+        lr = args.lr
+        tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}"
+    else:
+        tag = adapter_type
     
     # Find latest predictions file
     preds_files = sorted(Path(predictions_dir).glob("*" + tag + "*_preds.jsonl"))
@@ -410,7 +415,19 @@ def main():
     preds_path = preds_files[-1]  # latest
     run_name = preds_path.stem.replace("_preds", "")
     
-    model, tokenizer = load_model_and_tokenizer(model_config)
+    if adapter_type in ["ptq_int8", "ptq_nf4"]:
+        ptq_config = load_config('configs/ptq_config.yaml')
+        ptq_mode = "int8" if adapter_type == "ptq_int8" else "nf4"
+        ptq_mode_name = next(m for m in ptq_config['ptq']['modes'] if m['name'] == ptq_mode)
+        model, tokenizer = load_ptq_model_and_tokenizer(model_config, 
+                                                        ptq_mode_name, 
+                                                        ptq_mode)
+    elif adapter_type == "qlora":
+        train_qlora = load_config('configs/train_qlora.yaml')
+        model, tokenizer = load_qlora_model_and_tokenizer(model_config, train_qlora, False)
+        model = build_qlora_model(model, train_qlora)
+    else:
+        model, tokenizer = load_model_and_tokenizer(model_config)
     model.eval()
     
     metrics = {}

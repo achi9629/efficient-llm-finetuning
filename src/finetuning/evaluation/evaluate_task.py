@@ -124,7 +124,7 @@ def evaluate_from_file(preds_path: str) -> dict:
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora"], required=True)
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", "ptq_nf4"], required=True)
     parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
     parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")
@@ -138,10 +138,13 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     adapter_type = args.adapter_type
-    r = args.r
-    alpha = args.alpha
-    lr = args.lr
-    tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}" if adapter_type == 'qlora' else adapter_type
+    if adapter_type == "qlora":
+        r = args.r
+        alpha = args.alpha
+        lr = args.lr
+        tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}" if adapter_type == 'qlora' else adapter_type
+    else:
+        tag = adapter_type
     
     # Find latest predictions file
     preds_files = sorted(Path(predictions_dir).glob("*" + tag + "*_preds.jsonl"))
