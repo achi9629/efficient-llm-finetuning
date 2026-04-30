@@ -160,6 +160,9 @@ def load_ptq_model_and_tokenizer(model_config: dict,
         
         checkpoint_dir = ptq_config['checkpoint_dir']
         model_id = checkpoint_dir
+        
+        if not os.path.exists(checkpoint_dir):
+            raise FileNotFoundError(f"Checkpoint directory for GPTQ quantized model not found: {checkpoint_dir}. Please run the quantization step first to generate the quantized model checkpoint.")
 
         model = AutoGPTQForCausalLM.from_quantized(model_id,
                                                    device_map = device_map,
