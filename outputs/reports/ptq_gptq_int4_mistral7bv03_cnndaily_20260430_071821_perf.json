@@ -1,0 +1,20 @@
+{
+  "run_name": "ptq_gptq_int4_mistral7bv03_cnndaily_20260430_071821",
+  "timestamp": "2026-05-01T18:13:46.041493",
+  "greedy": {
+    "tok_per_sec_p50": 34.10398290562079,
+    "tok_per_sec_p90": 44.26827764890201,
+    "tok_per_sec_p95": 46.852500038470836,
+    "ttft_ms_avg": 16.634087046259083
+  },
+  "beam_search": {
+    "tok_per_sec_p50": 5.551809364949149,
+    "tok_per_sec_p90": 5.83043132152173,
+    "tok_per_sec_p95": 5.85138772882834
+  },
+  "peak_vram_gb": 4.91,
+  "current_vram_gb": 3.89,
+  "reserved_vram_gb": 5.49,
+  "model_size_gb": 3.88,
+  "param_count_billion": 0.27
+}

@@ -9,6 +9,6 @@ CUDA_VISIBLE_DEVICES=3 python -m src.finetuning.evaluation.evaluate_task \
     --r 2 \
     --alpha 4 \
     --lr 0.0002 \
-    --adapter_type qlora
+    --adapter_type gptq_int4
 
 echo "=== Done ==="

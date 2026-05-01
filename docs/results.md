@@ -16,12 +16,14 @@
 | QLoRA (r=2, 4-bit)    | 0.201   | 69.8             | 10.1           | 5.88           | 4.26            |
 | PTQ INT8 (base)       | 0.137   | 40.9             | 7.1            | 8.13           | 7.00            |
 | PTQ NF4 (base)        | 0.133   | 108.6            | 15.5           | 5.21           | 3.75            |
+| GPTQ INT4 (base)      | 0.142   | 34.0             | 5.5            | 4.91           | 3.88            |
 
 **Notes:**
 
 - LoRA scratch/PEFT inference is on merged FP16 model (adapters folded into base weights → zero overhead).
 - QLoRA inference keeps 4-bit base + LoRA adapters (no merge possible for NF4 weights).
 - PTQ INT8/NF4 are applied to the un-fine-tuned base model. No training involved.
+- GPTQ INT4 is applied to the un-fine-tuned base model with 128 validation samples as calibration data.
 
 ---
 
@@ -72,17 +74,23 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 11. **INT8 is slower than NF4** despite higher precision — LLM.int8() mixed-precision decomposition has more overhead than NF4 bulk dequantization. This is counterintuitive but well-documented.
 12. **PTQ is on the un-fine-tuned base model.** To get PTQ + fine-tuning gains, you'd merge LoRA adapters first, then apply PTQ to the merged checkpoint. That experiment is pending.
 
+### Phase B — GPTQ
+
+13. **GPTQ wins quality vs bitsandbytes PTQ** (0.142 vs 0.137/0.133). Calibration-based Hessian optimization recovers ~0.5-0.9 pt ROUGE-L over naive quantization at the same bit-width (4-bit).
+14. **GPTQ has lowest VRAM** (4.91 GB) but **slowest throughput** (34.0 tok/s, 80% regression). The `auto_gptq` Triton kernels are slower than bitsandbytes NF4 dequantization. ExLlama/Marlin kernels would likely be 2-3x faster.
+15. **All PTQ/GPTQ results are on the un-fine-tuned base model.** The ~5.9 pt gap vs QLoRA is not a fair comparison — applying GPTQ to the merged LoRA checkpoint would likely close most of this gap.
+
 ---
 
 ## 5. KPI Budget Check
 
-| KPI                          | Threshold           | Base FP16 | QLoRA (r=2) | PTQ INT8 | PTQ NF4 |
-|------------------------------|---------------------|-----------|-------------|----------|---------|
-| ROUGE-L drop vs best FT      | ≤ 2 pt              | —         | **best**    | -6.4 pt* | -6.8 pt*|
-| Latency regression (greedy)  | ≤ 20%               | baseline  | -60% ✗      | -76% ✗   | -37% ✗  |
-| Inference VRAM (quantized)   | ≤ 10 GB             | 14.79 ✗   | 5.88 ✓      | 8.13 ✓   | 5.21 ✓  |
-| Inference VRAM (FP16)        | ≤ 16 GB             | 14.79 ✓   | —           | —        | —       |
+| KPI                          | Threshold           | Base FP16 | QLoRA (r=2) | PTQ INT8 | PTQ NF4 | GPTQ INT4 |
+|------------------------------|---------------------|-----------|-------------|----------|---------|-----------|
+| ROUGE-L drop vs best FT      | ≤ 2 pt              | —         | **best**    | -6.4 pt* | -6.8 pt*| -5.9 pt*  |
+| Latency regression (greedy)  | ≤ 20%               | baseline  | -60% ✗      | -76% ✗   | -37% ✗  | -80% ✗    |
+| Inference VRAM (quantized)   | ≤ 10 GB             | 14.79 ✗   | 5.88 ✓      | 8.13 ✓   | 5.21 ✓  | 4.91 ✓    |
+| Inference VRAM (FP16)        | ≤ 16 GB             | 14.79 ✓   | —           | —        | —       | —         |
 
 *PTQ ROUGE-L drop is vs QLoRA best (0.201), not vs base. PTQ was run on the un-fine-tuned base model.
 
-**Key gap:** No method currently passes the latency budget. The quantized methods (QLoRA, PTQ) all exceed 20% throughput regression. LoRA merged FP16 passes latency but not the ≤10GB VRAM target. GPTQ/GGUF (Day 8-9) may close this gap.
+**Key gap:** No method currently passes the latency budget. All quantized methods (QLoRA, PTQ, GPTQ) exceed 20% throughput regression. GPTQ did NOT close the latency gap — 34 tok/s is even slower than NF4. LoRA merged FP16 passes latency but not the ≤10GB VRAM target. GGUF with llama.cpp kernels or ExLlama/Marlin backends for GPTQ may be needed. Also, applying quantization to the fine-tuned (merged LoRA) checkpoint — rather than the base model — would close the quality gap.

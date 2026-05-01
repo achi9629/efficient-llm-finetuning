@@ -373,7 +373,8 @@ def measure_model_size(model: AutoModelForCausalLM) -> dict:
             - 'param_count_billion' (float): The total number of parameters in billions.
     """
     
-    total_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    # total_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    total_bytes = sum(v.numel() * v.element_size() for v in model.state_dict().values())
     param_count = sum(p.numel() for p in model.parameters())
     
     # Return size in GB and parameter count in billions
@@ -385,7 +386,8 @@ def measure_model_size(model: AutoModelForCausalLM) -> dict:
 def main():
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", "ptq_nf4"], required=True)
+    parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", 
+                                                             "ptq_nf4", "gptq_int4"], required=True)
     parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
     parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")
@@ -415,9 +417,14 @@ def main():
     preds_path = preds_files[-1]  # latest
     run_name = preds_path.stem.replace("_preds", "")
     
-    if adapter_type in ["ptq_int8", "ptq_nf4"]:
+    if adapter_type in ["ptq_int8", "ptq_nf4", "gptq_int4"]:
         ptq_config = load_config('configs/ptq_config.yaml')
-        ptq_mode = "int8" if adapter_type == "ptq_int8" else "nf4"
+        if adapter_type == "gptq_int4":
+            ptq_mode = "gptq_int4"
+        elif adapter_type == "ptq_nf4":
+            ptq_mode = "nf4"
+        else:
+            ptq_mode = "int8"
         ptq_mode_name = next(m for m in ptq_config['ptq']['modes'] if m['name'] == ptq_mode)
         model, tokenizer = load_ptq_model_and_tokenizer(model_config, 
                                                         ptq_mode_name, 
