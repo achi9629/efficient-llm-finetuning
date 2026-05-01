@@ -39,7 +39,26 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 
 ---
 
-## 3. QLoRA Rank Sweep
+## 3a. LoRA PEFT Rank Sweep
+
+| Rank | Alpha | ROUGE-L | ROUGE-Lsum | Greedy tok/s p50 | Beam tok/s p50 | Peak VRAM (GB) | Model Size (GB) |
+|------|------:|--------:|-----------:|-----------------:|---------------:|---------------:|----------------:|
+| 2    | 4     | 0.2011  | 0.2638     | 177.3            | 30.4           | 14.53          | 13.50           |
+| 4    | 8     | 0.1918  | 0.2539     | 179.4            | 30.4           | 14.53          | 13.50           |
+| 8    | 16    | 0.1968  | 0.2565     | 184.0            | 30.2           | 14.53          | 13.50           |
+| 16   | 32    | 0.1917  | 0.2484     | 181.0            | 30.5           | 14.53          | 13.50           |
+| 32   | 64    | 0.1934  | 0.2594     | 184.1            | 29.9           | 14.53          | 13.50           |
+| 64   | 128   | 0.1839  | 0.2487     | 183.4            | 30.5           | 14.53          | 13.50           |
+
+**Selected:** r=2, alpha=4 — highest ROUGE-L (0.201).
+
+**Key observations:**
+
+- r=2 dominates across all ranks; r=64 is worst. The useful adaptation lives in a very low-rank subspace for this dataset size.
+- VRAM and throughput are constant across ranks — after merging, rank does not affect inference cost.
+- Merged LoRA inference runs at full FP16 speed (~180 tok/s greedy), confirming zero overhead post-merge.
+
+## 3b. QLoRA Rank Sweep
 
 | Rank | Alpha | ROUGE-L | ROUGE-Lsum | Greedy tok/s p50 | Beam tok/s p50 | Peak VRAM (GB) | TTFT avg (ms) |
 |------|------:|--------:|-----------:|-----------------:|---------------:|---------------:|--------------:|
@@ -50,7 +69,13 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 | 32   | 64    | 0.1892  | 0.2540     | 68.63            | 9.97           | 5.88           | 12.48         |
 | 64   | 128   | 0.1802  | 0.2429     | 69.66            | 8.89           | 5.88           | 11.86         |
 
-**Selected:** r=2, alpha=4 — highest ROUGE-L, best throughput, same VRAM as all ranks.
+**Selected:** r=2, alpha=4 — highest ROUGE-L (0.201).
+
+**Key observations:**
+
+- Same rank ordering as LoRA: r=2 wins, r=64 is worst. Low-rank subspace is sufficient for this task/dataset.
+- 4-bit base quantization does not degrade the fine-tuned solution — QLoRA r=2 (0.201) matches LoRA r=2 (0.201) exactly.
+- QLoRA trades inference speed (~70 tok/s vs ~180 tok/s) for 2.5× VRAM reduction (5.88 vs 14.53 GB) — a direct memory-latency tradeoff.
 
 ---
 

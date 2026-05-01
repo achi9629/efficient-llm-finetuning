@@ -19,19 +19,19 @@ def main():
     
     model, tokenizer = load_model_and_tokenizer(model_config)
     
+    tag = args.adapter_path.split('/')[-2]
+    
     if args.adapter_type == "scratch":
         model = load_lora_weights(model = model, 
                                   path = args.adapter_path,
                                   target_modules = lora_config['lora']['target_modules']).to(model.device)
         
         model = merge_lora(model)
-        name = "lora_scratch"
     elif args.adapter_type == "peft":
         model = PeftModel.from_pretrained(model, args.adapter_path)
         model = model.merge_and_unload()
-        name = "lora_peft"
     else:
-        name = "base"
+        raise ValueError("Invalid adapter type. Choose either 'scratch' or 'peft'.")
     
     model.eval()
     predictions = run_inference(model, 
@@ -39,7 +39,7 @@ def main():
                                 data_config, 
                                 eval_config)
     
-    run_name = generate_run_name(name, 
+    run_name = generate_run_name(tag, 
                                  model_config['model']['name'],
                                  data_config['dataset']['name'])
     save_predictions(run_name, predictions, eval_config['output']['predictions_dir'])

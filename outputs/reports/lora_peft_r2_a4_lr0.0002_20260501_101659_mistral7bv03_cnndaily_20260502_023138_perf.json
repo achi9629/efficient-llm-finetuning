@@ -1,0 +1,20 @@
+{
+  "run_name": "lora_peft_r2_a4_lr0.0002_20260501_101659_mistral7bv03_cnndaily_20260502_023138",
+  "timestamp": "2026-05-02T02:52:26.028148",
+  "greedy": {
+    "tok_per_sec_p50": 177.27092331772855,
+    "tok_per_sec_p90": 252.6950092040476,
+    "tok_per_sec_p95": 286.6295028419861,
+    "ttft_ms_avg": 14.104027213761583
+  },
+  "beam_search": {
+    "tok_per_sec_p50": 30.42472015622004,
+    "tok_per_sec_p90": 34.93972618999132,
+    "tok_per_sec_p95": 35.23783572431535
+  },
+  "peak_vram_gb": 14.53,
+  "current_vram_gb": 13.51,
+  "reserved_vram_gb": 15.13,
+  "model_size_gb": 13.5,
+  "param_count_billion": 7.25
+}

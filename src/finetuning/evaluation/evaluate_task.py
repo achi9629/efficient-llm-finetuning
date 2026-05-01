@@ -139,11 +139,11 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     adapter_type = args.adapter_type
-    if adapter_type == "qlora":
+    if adapter_type in ["qlora", 'lora_peft']:
         r = args.r
         alpha = args.alpha
         lr = args.lr
-        tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}" if adapter_type == 'qlora' else adapter_type
+        tag = f"{adapter_type}_r{r}_a{alpha}_lr{lr}"
     else:
         tag = adapter_type
     

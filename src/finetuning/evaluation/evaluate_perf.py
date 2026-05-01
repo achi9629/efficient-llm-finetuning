@@ -402,7 +402,7 @@ def main():
     reports_dir = eval_config['output']['reports_dir']
     
     adapter_type = args.adapter_type
-    if adapter_type == "qlora":
+    if adapter_type in ["qlora", 'lora_peft']:
         r = args.r
         alpha = args.alpha
         lr = args.lr
@@ -416,6 +416,7 @@ def main():
         raise FileNotFoundError(f"No prediction files found in {predictions_dir}")
     preds_path = preds_files[-1]  # latest
     run_name = preds_path.stem.replace("_preds", "")
+    print('Running performance evaluation for:', run_name)
     
     if adapter_type in ["ptq_int8", "ptq_nf4", "gptq_int4"]:
         ptq_config = load_config('configs/ptq_config.yaml')

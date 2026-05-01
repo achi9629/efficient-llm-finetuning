@@ -7,6 +7,9 @@ profiler_trace.json
 *.egg-info/
 
 notebooks/
+assets/datasets/
+assets/models/
+assets/files/
 Mistral-7B-v0.3/
 GPTQ_Mistral-7B-v0.3/
 cnn_dailymail/
