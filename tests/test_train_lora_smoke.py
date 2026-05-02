@@ -3,7 +3,7 @@ import pytest
 import logging
 from transformers import MistralConfig, MistralForCausalLM, AutoTokenizer
 
-from finetuning import inject_lora, merge_lora, save_lora_weights, \
+from src.finetuning import inject_lora, merge_lora, save_lora_weights, \
                        load_lora_weights, LoRALinear
 
 logger = logging.getLogger(__name__)

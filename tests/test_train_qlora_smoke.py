@@ -5,7 +5,7 @@ from bitsandbytes.nn import Linear4bit
 from peft import prepare_model_for_kbit_training
 from transformers import BitsAndBytesConfig, MistralConfig, MistralForCausalLM, AutoTokenizer
 
-from finetuning import load_config, inject_lora, save_lora_weights, \
+from src.finetuning import load_config, inject_lora, save_lora_weights, \
                        load_lora_weights, LoRALinear
 
 logger = logging.getLogger(__name__)

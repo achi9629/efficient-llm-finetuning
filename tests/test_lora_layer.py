@@ -2,7 +2,7 @@ import torch
 import pytest, logging
 import torch.nn as nn
 
-from finetuning import LoRALinear, inject_lora, merge_lora, save_lora_weights, load_lora_weights
+from src.finetuning import LoRALinear, inject_lora, merge_lora, save_lora_weights, load_lora_weights
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
