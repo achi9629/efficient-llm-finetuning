@@ -15,7 +15,7 @@ from finetuning import load_config, load_ptq_model_and_tokenizer
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def tiny_mistral_path(tmp_path_factory):
     
     tmp_dir = tmp_path_factory.mktemp("tiny_mistral")
@@ -32,11 +32,61 @@ def tiny_mistral_path(tmp_path_factory):
     
     return tmp_dir
 
+@pytest.fixture(scope="module")
+def gptq_quantized_checkpoint(tiny_mistral_path, tmp_path_factory):
+    """Quantize once, reuse across all GPTQ tests in this module."""
+    
+    bits = 4
+    group_size = 128
+    desc_act = False
+    torch_dtype = torch.float16
+    trust_remote_code = False
+    device_map = "auto"
+    checkpoint_dir = str(tmp_path_factory.mktemp("gptq_shared"))
+    
+    tokenizer = AutoTokenizer.from_pretrained('assets/models/Mistral-7B-v0.3', 
+                                              padding_side = 'left', 
+                                              model_max_length = 1280,
+                                              trust_remote_code = False)
+    tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
+    
+    quantize_config = BaseQuantizeConfig(bits = bits,
+                                         group_size = group_size,
+                                         desc_act = desc_act,
+                        )
+    
+    model = AutoGPTQForCausalLM.from_pretrained(tiny_mistral_path,
+                                                quantize_config = quantize_config,
+                                                torch_dtype = torch_dtype,
+                                                trust_remote_code = trust_remote_code,
+                                                device_map = device_map,
+                )
+    
+    calib_samples = [
+        "The cat sat on the mat.",
+        "The quick brown fox jumps over the lazy dog.",
+        "Artificial intelligence is transforming the world.",
+        "The weather today is sunny with a chance of rain.",
+        "OpenAI's GPT models are powerful language models."
+    ]
+    # Tokenize calibration samples for auto_gptq
+    calib_tokenized = [tokenizer(s, return_tensors = "pt", 
+                                 truncation = True,
+                                 max_length = 128)
+                        for s in calib_samples
+                        ]
+    
+    model.quantize(calib_tokenized)
+    model.save_quantized(checkpoint_dir)
+    tokenizer.save_pretrained(checkpoint_dir)
+
+    return checkpoint_dir
+
 def test_ptq_config_loading():
     
     ptq_config = load_config("configs/ptq_config.yaml")
     
-    assert len(ptq_config['ptq']['modes']) == 3, "Expected 2 PTQ modes in the configuration"
+    assert len(ptq_config['ptq']['modes']) == 4, "Expected 4 PTQ modes defined in the configuration"
     assert ptq_config['ptq']['modes'][0]['name'] == 'int8', "First PTQ mode should be 'int8'"
     assert ptq_config['ptq']['modes'][0]['load_in_8bit'] == True, "First PTQ mode should have 'load_in_8bit' set to True"
     assert ptq_config['ptq']['modes'][0]['load_in_4bit'] == False, "First PTQ mode should have 'load_in_4bit' set to False"
@@ -48,6 +98,11 @@ def test_ptq_config_loading():
     assert ptq_config['ptq']['modes'][2]['bits'] == 4, "Third PTQ mode should have 'bits' set to 4"
     assert ptq_config['ptq']['modes'][2]['group_size'] == 128, "Third PTQ mode should have 'group_size' set to 128"
     assert 'checkpoint_dir' in ptq_config['ptq']['modes'][2], "Third PTQ mode should have 'checkpoint_dir' specified in the configuration"
+    assert ptq_config['ptq']['modes'][3]['name'] == 'awq_int4', "Fourth PTQ mode should be 'awq_int4'"
+    assert ptq_config['ptq']['modes'][3]['bits'] == 4, "Fourth PTQ mode should have 'bits' set to 4"
+    assert ptq_config['ptq']['modes'][3]['group_size'] == 128, "Fourth PTQ mode should have 'group_size' set to 128"
+    assert ptq_config['ptq']['modes'][3]['zero_point'] == True, "Fourth PTQ mode should have 'zero_point' set to True"
+    assert ptq_config['ptq']['modes'][3]['version'] == 'GEMM', "Fourth PTQ mode should have 'version' set to 'GEMM'"
     
 def test_int8_model_loading(tiny_mistral_path):
     
@@ -172,52 +227,13 @@ def test_gptq_quantize_config_creation():
     assert quantize_config.group_size == group_size, "QuantizeConfig should have the correct group size"
     assert quantize_config.desc_act == desc_act, "QuantizeConfig should have the correct desc_act value"
     
-def test_gptq_quantize_and_save(tiny_mistral_path, tmp_path):
+def test_gptq_quantize_and_save(gptq_quantized_checkpoint):
     
     bits = 4
     group_size = 128
     desc_act = False
-    torch_dtype = torch.float16
-    trust_remote_code = False
-    device_map = "auto"
-    checkpoint_dir = str(tmp_path / "gptq_output")
-    
-    tokenizer = AutoTokenizer.from_pretrained('assets/models/Mistral-7B-v0.3', 
-                                              padding_side = 'left', 
-                                              model_max_length = 1280,
-                                              trust_remote_code = False)
-    tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
-    
-    quantize_config = BaseQuantizeConfig(bits = bits,
-                                         group_size = group_size,
-                                         desc_act = desc_act,
-                        )
-    
-    model = AutoGPTQForCausalLM.from_pretrained(tiny_mistral_path,
-                                                quantize_config = quantize_config,
-                                                torch_dtype = torch_dtype,
-                                                trust_remote_code = trust_remote_code,
-                                                device_map = device_map,
-                )
-    
-    calib_samples = [
-        "The cat sat on the mat.",
-        "The quick brown fox jumps over the lazy dog.",
-        "Artificial intelligence is transforming the world.",
-        "The weather today is sunny with a chance of rain.",
-        "OpenAI's GPT models are powerful language models."
-    ]
-    # Tokenize calibration samples for auto_gptq
-    calib_tokenized = [tokenizer(s, return_tensors = "pt", 
-                                 truncation = True,
-                                 max_length = 128)
-                        for s in calib_samples
-                        ]
-    
-    model.quantize(calib_tokenized)
-    model.save_quantized(checkpoint_dir)
-    tokenizer.save_pretrained(checkpoint_dir)
-    
+    checkpoint_dir = gptq_quantized_checkpoint
+        
     assert os.path.isdir(checkpoint_dir), "Checkpoint directory should be created after saving quantized model"
     assert os.path.isfile(os.path.join(checkpoint_dir, "quantize_config.json")), "Quantize config file should be saved in the checkpoint directory"
     assert os.path.isfile(os.path.join(checkpoint_dir, "tokenizer_config.json")), "Tokenizer config file should be saved in the checkpoint directory"
@@ -234,51 +250,11 @@ def test_gptq_quantize_and_save(tiny_mistral_path, tmp_path):
                    any(f.endswith(".safetensors") for f in os.listdir(checkpoint_dir)))
     assert has_weights, "Quantized model weights should be saved"
     
-def test_gptq_load_from_quantized(tiny_mistral_path, tmp_path):
+def test_gptq_load_from_quantized(gptq_quantized_checkpoint):
     
-    bits = 4
-    group_size = 128
-    desc_act = False
-    torch_dtype = torch.float16
     trust_remote_code = False
     device_map = "auto"
-    checkpoint_dir = str(tmp_path / "gptq_output")
-    
-    tokenizer = AutoTokenizer.from_pretrained('assets/models/Mistral-7B-v0.3', 
-                                              padding_side = 'left', 
-                                              model_max_length = 1280,
-                                              trust_remote_code = False)
-    tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
-    
-    quantize_config = BaseQuantizeConfig(bits = bits,
-                                         group_size = group_size,
-                                         desc_act = desc_act,
-                        )
-    
-    model = AutoGPTQForCausalLM.from_pretrained(tiny_mistral_path,
-                                                quantize_config = quantize_config,
-                                                torch_dtype = torch_dtype,
-                                                trust_remote_code = trust_remote_code,
-                                                device_map = device_map,
-                )
-    
-    calib_samples = [
-        "The cat sat on the mat.",
-        "The quick brown fox jumps over the lazy dog.",
-        "Artificial intelligence is transforming the world.",
-        "The weather today is sunny with a chance of rain.",
-        "OpenAI's GPT models are powerful language models."
-    ]
-    # Tokenize calibration samples for auto_gptq
-    calib_tokenized = [tokenizer(s, return_tensors = "pt", 
-                                 truncation = True,
-                                 max_length = 128)
-                        for s in calib_samples
-                        ]
-    
-    model.quantize(calib_tokenized)
-    model.save_quantized(checkpoint_dir)
-    tokenizer.save_pretrained(checkpoint_dir)
+    checkpoint_dir = gptq_quantized_checkpoint
     
     model = AutoGPTQForCausalLM.from_quantized(checkpoint_dir,
                                                 device_map = device_map,
@@ -288,51 +264,11 @@ def test_gptq_load_from_quantized(tiny_mistral_path, tmp_path):
     assert model is not None, "Model should be loaded successfully from quantized checkpoint"
     assert next(model.parameters()).device.type == 'cuda', "Model parameters should be loaded on the correct device"
     
-def test_gptq_forward_pass(tiny_mistral_path, tmp_path):
-    
-    bits = 4
-    group_size = 128
-    desc_act = False
-    torch_dtype = torch.float16
+def test_gptq_forward_pass(gptq_quantized_checkpoint):
+
     trust_remote_code = False
     device_map = "auto"
-    checkpoint_dir = str(tmp_path / "gptq_output")
-    
-    tokenizer = AutoTokenizer.from_pretrained('assets/models/Mistral-7B-v0.3', 
-                                              padding_side = 'left', 
-                                              model_max_length = 1280,
-                                              trust_remote_code = False)
-    tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
-    
-    quantize_config = BaseQuantizeConfig(bits = bits,
-                                         group_size = group_size,
-                                         desc_act = desc_act,
-                        )
-    
-    model = AutoGPTQForCausalLM.from_pretrained(tiny_mistral_path,
-                                                quantize_config = quantize_config,
-                                                torch_dtype = torch_dtype,
-                                                trust_remote_code = trust_remote_code,
-                                                device_map = device_map,
-                )
-    
-    calib_samples = [
-        "The cat sat on the mat.",
-        "The quick brown fox jumps over the lazy dog.",
-        "Artificial intelligence is transforming the world.",
-        "The weather today is sunny with a chance of rain.",
-        "OpenAI's GPT models are powerful language models."
-    ]
-    # Tokenize calibration samples for auto_gptq
-    calib_tokenized = [tokenizer(s, return_tensors = "pt", 
-                                 truncation = True,
-                                 max_length = 128)
-                        for s in calib_samples
-                        ]
-    
-    model.quantize(calib_tokenized)
-    model.save_quantized(checkpoint_dir)
-    tokenizer.save_pretrained(checkpoint_dir)
+    checkpoint_dir = gptq_quantized_checkpoint
     
     model = AutoGPTQForCausalLM.from_quantized(checkpoint_dir,
                                                 device_map = device_map,
@@ -348,52 +284,8 @@ def test_gptq_forward_pass(tiny_mistral_path, tmp_path):
     assert outputs.shape[1] > input_ids.shape[1], "Output sequence length should be greater than input sequence length due to generation"
     assert torch.isnan(outputs).sum() == 0, "Generated output should not contain NaN values"
     
-def test_gptq_invalid_checkpoint_dir(tiny_mistral_path, tmp_path):
-    
-    bits = 4
-    group_size = 128
-    desc_act = False
-    torch_dtype = torch.float16
-    trust_remote_code = False
-    device_map = "auto"
-    checkpoint_dir = str(tmp_path / "gptq_output")
-    
-    tokenizer = AutoTokenizer.from_pretrained('assets/models/Mistral-7B-v0.3', 
-                                              padding_side = 'left', 
-                                              model_max_length = 1280,
-                                              trust_remote_code = False)
-    tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
-    
-    quantize_config = BaseQuantizeConfig(bits = bits,
-                                         group_size = group_size,
-                                         desc_act = desc_act,
-                        )
-    
-    model = AutoGPTQForCausalLM.from_pretrained(tiny_mistral_path,
-                                                quantize_config = quantize_config,
-                                                torch_dtype = torch_dtype,
-                                                trust_remote_code = trust_remote_code,
-                                                device_map = device_map,
-                )
-    
-    calib_samples = [
-        "The cat sat on the mat.",
-        "The quick brown fox jumps over the lazy dog.",
-        "Artificial intelligence is transforming the world.",
-        "The weather today is sunny with a chance of rain.",
-        "OpenAI's GPT models are powerful language models."
-    ]
-    # Tokenize calibration samples for auto_gptq
-    calib_tokenized = [tokenizer(s, return_tensors = "pt", 
-                                 truncation = True,
-                                 max_length = 128)
-                        for s in calib_samples
-                        ]
-    
-    model.quantize(calib_tokenized)
-    model.save_quantized(checkpoint_dir)
-    tokenizer.save_pretrained(checkpoint_dir)
-    
+def test_gptq_invalid_checkpoint_dir(tmp_path):
+
     model_config = load_config("configs/model_config.yaml")
     model_config['model']['name'] = str(tiny_mistral_path)
     

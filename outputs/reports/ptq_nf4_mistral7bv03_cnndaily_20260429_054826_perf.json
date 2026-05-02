@@ -1,20 +1,20 @@
 {
   "run_name": "ptq_nf4_mistral7bv03_cnndaily_20260429_054826",
-  "timestamp": "2026-04-29T07:45:53.228384",
+  "timestamp": "2026-05-03T00:34:52.208912",
   "greedy": {
-    "tok_per_sec_p50": 108.63055606280302,
-    "tok_per_sec_p90": 138.25285028720958,
-    "tok_per_sec_p95": 150.85212340196765,
-    "ttft_ms_avg": 11.973568474058993
+    "tok_per_sec_p50": 112.39246132266972,
+    "tok_per_sec_p90": 144.53301691819135,
+    "tok_per_sec_p95": 158.6948149039365,
+    "ttft_ms_avg": 15.040345492889173
   },
   "beam_search": {
-    "tok_per_sec_p50": 15.470206644229041,
-    "tok_per_sec_p90": 16.5503691995929,
-    "tok_per_sec_p95": 16.64383225765005
+    "tok_per_sec_p50": 15.432936122492563,
+    "tok_per_sec_p90": 16.360005304716463,
+    "tok_per_sec_p95": 16.439051044765275
   },
   "peak_vram_gb": 5.21,
   "current_vram_gb": 4.19,
   "reserved_vram_gb": 5.79,
-  "model_size_gb": 3.75,
+  "model_size_gb": 4.16,
   "param_count_billion": 3.76
 }

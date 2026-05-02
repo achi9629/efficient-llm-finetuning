@@ -1,0 +1,8 @@
+{
+  "run_name": "ptq_awq_int4_lora_peft_merged_r2_mistral_7b_v03_cnndaily_20260502_211801",
+  "timestamp": "2026-05-02T21:24:58.152321",
+  "rouge1": 0.28768478634870404,
+  "rouge2": 0.06965007723617282,
+  "rougeL": 0.19669495141263638,
+  "rougeLsum": 0.26114557951319506
+}

@@ -102,3 +102,72 @@ if state.log_history:
 **Takeaway:** HF Trainer's callback ordering has subtle timing issues. on_log receives a copy-on-write dict — modifications to it are ephemeral unless you also patch state.log_history directly.
 
 ---
+
+## 8. GPTQ base evaluation loaded wrong checkpoint
+
+**Observed:** Initial GPTQ "base" benchmark showed 83.7 tok/s greedy — suspiciously close to the LoRA-merged GPTQ result (84.5 tok/s). Re-running with corrected paths gave 34.0 tok/s.
+
+**Root cause:** `ptq_config.yaml` `checkpoint_dir` for GPTQ was updated to point to the LoRA-merged quantized folder during the merge experiments. The "base" eval script used this config path, silently loading the LoRA-merged model instead of base Mistral.
+
+**Fix:** Verified by re-running with explicit base model path. Updated config and results table with correct numbers.
+
+**Takeaway:** Config files are mutable state. When switching between base and fine-tuned evaluation, validate which checkpoint is actually loaded — log the model path at load time. A single wrong `checkpoint_dir` can silently corrupt all downstream benchmarks.
+
+---
+
+## 9. AWQ .device attribute error on AutoAWQForCausalLM
+
+**Observed:** `inference_utils.py` line 102 calls `.to(model.device)` on inputs. AWQ's `AutoAWQForCausalLM` wrapper doesn't expose a `.device` attribute like HuggingFace models do.
+
+**Root cause:** `AutoAWQForCausalLM` wraps the actual `model` object. The HF model lives at `model.model`, not `model` directly. The `.device` attribute exists on the inner model, not the wrapper.
+
+**Fix:** Use `next(model.parameters()).device` or unwrap via `model.model.device`. This is framework-agnostic and works for both HF and AWQ models.
+
+**Takeaway:** Third-party quantization wrappers (AutoAWQ, AutoGPTQ) don't always expose the same API as HuggingFace `AutoModelForCausalLM`. Always check the wrapper's interface — don't assume duck typing works.
+
+---
+
+## 10. Throughput (tok/s) not comparable across base vs fine-tuned models
+
+**Observed:** LoRA-merged PTQ INT8 showed 109.5 tok/s vs base PTQ INT8 at 40.1 tok/s — a 2.7× gap on the same A100 GPU, same quantization, same benchmark script.
+
+**Expected:** Same quantization method + same hardware = similar throughput.
+
+**Root cause:** The throughput formula is `generated_tokens / total_time` (including prefill). Fine-tuned models generate concise 30-60 token bullet summaries (early EOS). Base model generates verbose 200+ token paragraphs (hits max_new_tokens=256). Different token counts change how the fixed prefill cost is amortized, and longer generations may trigger `no_repeat_ngram_size` penalties that slow decode.
+
+**Fix:** Not a bug — this is the correct measurement of real-world throughput. For hardware-level decode speed comparisons, one would need `min_new_tokens = max_new_tokens` to force identical generation lengths. But that's artificial.
+
+**Takeaway:** When benchmarking quantization methods, compare within the same model family (base vs base, or LoRA vs LoRA). Cross-family tok/s comparisons are confounded by generation behavior differences.
+
+---
+
+## 11. PEFT `PEFT_TYPE_TO_MODEL_MAPPING` attribute missing
+
+**Observed:** `ImportError` / `AttributeError` when loading PEFT models with certain peft versions: `peft.peft_model` has no attribute `PEFT_TYPE_TO_MODEL_MAPPING`.
+
+**Root cause:** PEFT library version mismatch. Some versions removed or relocated this mapping.
+
+**Fix:** Added shim at import time:
+
+```python
+if not hasattr(peft.peft_model, 'PEFT_TYPE_TO_MODEL_MAPPING'):
+    peft.peft_model.PEFT_TYPE_TO_MODEL_MAPPING = {}
+```
+
+**Takeaway:** Pin library versions in requirements.txt. When using multiple quantization libraries (bitsandbytes, auto_gptq, autoawq, peft, optimum), version conflicts are inevitable. Add defensive shims for known breakages.
+
+---
+
+## 12. NF4 quantized model faster than FP16 for autoregressive decode
+
+**Observed:** LoRA-merged + PTQ NF4 ran at 285.2 tok/s greedy — 61% faster than the same LoRA-merged model at FP16 (177.2 tok/s). Same model weights, same prompts, same A100 GPU.
+
+**Expected:** Quantization adds dequantization overhead → should be slower.
+
+**Root cause:** Autoregressive decoding (batch_size=1, one token at a time) is **memory-bandwidth-bound**, not compute-bound. Each decode step reads the entire weight matrix from HBM but only does a single vector-matrix multiply. NF4 weights are 3.25× smaller than FP16 → 3.25× fewer bytes read per step → less time waiting on HBM bandwidth. The dequantization ALU cost is fully hidden behind the memory transfer on A100 (which has high compute:bandwidth ratio).
+
+**Why INT8 doesn't show the same speedup:** LLM.int8() uses mixed-precision decomposition — outlier features are computed in FP16, rest in INT8. The decomposition/scatter logic adds compute overhead that isn't memory-bound, negating the bandwidth savings.
+
+**Fix:** Not a bug — this is correct behavior. NF4 is genuinely faster for single-request autoregressive serving. The "quantization = slower" intuition only holds for compute-bound workloads (large batches, prefill phase).
+
+**Takeaway:** For single-request serving, 4-bit quantization wins on both VRAM and latency. The tradeoff only becomes real at high batch sizes where the workload becomes compute-bound and dequantization overhead is no longer hidden.

@@ -125,7 +125,9 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", 
-                                                             "ptq_nf4", "gptq_int4"], required=True)
+                                                             "ptq_nf4", "gptq_int4", "ptq_int8_lora_peft_merged_r2", 
+                                                             "ptq_nf4_lora_peft_merged_r2", "ptq_gptq_int4_lora_peft_merged_r2",
+                                                             "ptq_awq_int4_lora_peft_merged_r2"], required=True)
     parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
     parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")

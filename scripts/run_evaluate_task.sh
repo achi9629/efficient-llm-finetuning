@@ -9,6 +9,6 @@ CUDA_VISIBLE_DEVICES=0 python -m src.finetuning.evaluation.evaluate_task \
     --r 64 \
     --alpha 128 \
     --lr 0.0002 \
-    --adapter_type lora_peft
+    --adapter_type ptq_awq_int4_lora_peft_merged_r2
 
 echo "=== Done ==="

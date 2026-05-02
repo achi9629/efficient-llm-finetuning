@@ -214,7 +214,7 @@ def measure_latency(model: AutoModelForCausalLM,
                             return_tensors = 'pt', 
                             truncation = True, 
                             max_length = max_input_len
-                            ).to(model.device)
+                            ).to(next(model.parameters()).device)
             
             tok_per_sec, ttft_ms = run_single_generation(model, tokenizer, measure_ttft, inputs, gen_config, num_beams)
             
@@ -283,7 +283,7 @@ def measure_memory(model: AutoModelForCausalLM,
     input_field = data_config['dataset']['input_field']
     max_input_len = data_config['preprocessing']['max_input_length']
     gen_config = eval_config['evaluation']['generation']
-    device = model.device
+    device = next(model.parameters()).device
     
     # Load dataset
     dataset = load_dataset(os.path.join('assets/datasets', 
@@ -318,7 +318,7 @@ def measure_memory(model: AutoModelForCausalLM,
                         return_tensors = 'pt', 
                         truncation = True, 
                         max_length = max_input_len
-                        ).to(model.device)
+                        ).to(next(model.parameters()).device)
         
         '''
         Args for model.generate():
@@ -387,7 +387,9 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter_type", type=str, choices=["lora_scratch", "lora_peft", "base", "qlora", "ptq_int8", 
-                                                             "ptq_nf4", "gptq_int4"], required=True)
+                                                             "ptq_nf4", "gptq_int4", "ptq_int8_lora_peft_merged_r2",
+                                                             "ptq_nf4_lora_peft_merged_r2", "ptq_gptq_int4_lora_peft_merged_r2",
+                                                             "ptq_awq_int4_lora_peft_merged_r2"], required=True)
     parser.add_argument("--r", type=int, default=8, help="LoRA rank (ignored for non-LoRA models)")
     parser.add_argument("--alpha", type=int, default=16, help="LoRA alpha (ignored for non-LoRA models)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate used during fine-tuning (for tagging purposes)")
@@ -418,19 +420,26 @@ def main():
     run_name = preds_path.stem.replace("_preds", "")
     print('Running performance evaluation for:', run_name)
     
-    if adapter_type in ["ptq_int8", "ptq_nf4", "gptq_int4"]:
+    if 'ptq' in adapter_type:
         ptq_config = load_config('configs/ptq_config.yaml')
-        if adapter_type == "gptq_int4":
+        if "gptq_int4" in adapter_type:
             ptq_mode = "gptq_int4"
-        elif adapter_type == "ptq_nf4":
+        elif "ptq_nf4" in adapter_type:
             ptq_mode = "nf4"
-        else:
+        elif "ptq_int8" in adapter_type:
             ptq_mode = "int8"
+        elif "awq_int4" in adapter_type:
+            ptq_mode = "awq_int4"
+        else:
+            raise ValueError(f"Unsupported adapter type for PTQ: {adapter_type}")
         ptq_mode_name = next(m for m in ptq_config['ptq']['modes'] if m['name'] == ptq_mode)
+        if 'lora_peft' in adapter_type:
+            model_config['model']['name'] = ptq_mode_name['checkpoint_dir']
+        
         model, tokenizer = load_ptq_model_and_tokenizer(model_config, 
                                                         ptq_mode_name, 
                                                         ptq_mode)
-    elif adapter_type == "qlora":
+    elif 'qlora' in adapter_type:
         train_qlora = load_config('configs/train_qlora.yaml')
         model, tokenizer = load_qlora_model_and_tokenizer(model_config, train_qlora, False)
         model = build_qlora_model(model, train_qlora)

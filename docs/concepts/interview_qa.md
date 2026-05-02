@@ -38,10 +38,17 @@ I built this project to answer those questions with numbers — not intuition. I
 - Scratch LoRA: 0.183 vs PEFT LoRA: 0.191 (0.8 pt gap)
 - "I use PEFT in production. But having built from scratch, I can debug it when PEFT does something unexpected."
 
-### Finding 5: Training-time vs inference-time quantization are orthogonal
+### Finding 5: Training-time vs inference-time quantization are orthogonal — and composable
 
-- QLoRA = training budget. PTQ/GPTQ = serving cost. You often want both.
-- "When someone says 'we used quantization,' I ask: training-time or inference-time? They solve different bottlenecks."
+- QLoRA = training budget. PTQ/GPTQ/AWQ = serving cost. The best results combine both.
+- LoRA-merged + PTQ NF4: 0.201 ROUGE-L, 5.21 GB VRAM — same quality as QLoRA with 4× throughput.
+- "The question isn't 'which quantization?' — it's 'which quantization at which stage?' Train with QLoRA for memory. Deploy with GPTQ/NF4 for speed. They solve different bottlenecks and stack."
+
+### Finding 6: GPTQ vs AWQ — kernel quality matters more than algorithm
+
+- Both achieve 0.196 ROUGE-L on the same model. Quality is equivalent.
+- GPTQ: 84.5 tok/s (auto_gptq Triton kernels). AWQ: 42.3 tok/s (autoawq kernels). 2× gap.
+- "In theory, AWQ should be faster — it's designed for efficient inference. In practice, kernel implementations vary by model architecture. Mistral's GQA heads aren't well-optimized in autoawq. Always benchmark on YOUR model, not on the paper's benchmarks."
 
 ---
 
@@ -49,7 +56,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "Tell me about a project"
 
-"I was investigating the real cost-quality tradeoffs of LLM adaptation on a single GPU. The surprising finding was that standard choices — rank=16, QLoRA for 'efficiency' — were suboptimal. Rank=2 outperformed rank=64 by 2 ROUGE-L points because our data was small enough that higher capacity overfits. QLoRA delivered real inference VRAM savings (5.83 vs 14.5 GB — 60% reduction) but at a 60% throughput penalty. I built a decision framework mapping deployment constraints to method choices."
+"I built an end-to-end pipeline for efficient LLM adaptation: LoRA from scratch, QLoRA, rank sweeps, LoRA merge, and four quantization backends (bitsandbytes INT8/NF4, GPTQ, AWQ). The key finding: the best deployment path is fine-tune with QLoRA (10GB VRAM), merge adapters, then quantize with NF4 for serving (5.2GB, 285 tok/s — actually 61% faster than FP16 because autoregressive decode is memory-bandwidth-bound and 4-bit weights read 3× fewer bytes from HBM). That's 0.201 ROUGE-L — matching the full-precision fine-tuned model — at 65% VRAM reduction. I also found that GPTQ and AWQ produce identical quality but 2× different throughput due to kernel implementation differences, which taught me that algorithm papers and production performance are very different things."
 
 ### "Why not just use PEFT?"
 
@@ -106,6 +113,22 @@ I built this project to answer those questions with numbers — not intuition. I
 ### "How would you decide rank for a new task?"
 
 "Start with a small sweep: {4, 8, 16, 32}. Plot quality vs rank. If quality plateaus or drops, you've found the ceiling. On small data (<10k samples), start lower. On large instruction-tuning datasets, r=32-64 is common. The key is: sweep, don't guess."
+
+### "What's the difference between GPTQ and AWQ?"
+
+"Both are calibration-based 4-bit quantization, but they optimize different objectives. GPTQ minimizes layer-wise reconstruction error using second-order (Hessian) information — it asks 'which weight rounding minimizes output error?' AWQ preserves salient weights based on activation magnitudes — it asks 'which weights matter most based on what the model actually computes?' In our experiments, both achieved identical ROUGE-L (0.196) on the merged model. The practical difference was throughput: GPTQ at 84.5 tok/s vs AWQ at 42.3 tok/s — the autoawq kernels were less optimized for Mistral's GQA architecture."
+
+### "You applied quantization to the fine-tuned model. Why not quantize first, then fine-tune?"
+
+"Order matters. QAT (quantize-aware training) is the 'quantize first' approach — it's more expensive but adapts weights to quantization noise. Our approach — fine-tune first (LoRA), merge adapters into FP16, then apply PTQ — is cheaper and simpler. It worked because LoRA adaptation is low-rank and doesn't push weights into distributions that break under quantization. The results confirm this: LoRA-merged + GPTQ achieved 0.196 ROUGE-L vs QLoRA's 0.201 — only 0.5 pt gap, and we got 84.5 tok/s vs QLoRA's 70 tok/s."
+
+### "Your throughput numbers vary wildly between base and fine-tuned models. Is that a bug?"
+
+"No — it's a measurement artifact that reveals something important. We compute tok/s as generated_tokens / total_time including prefill. The base model generates verbose 200-token paragraphs. The fine-tuned model generates concise 40-token bullet summaries and stops. Different output lengths mean different amortization of the fixed prefill cost. The takeaway: always compare throughput within the same model family. Cross-family tok/s is confounded by generation behavior. If you need hardware-level decode benchmarks, force identical output lengths with min_new_tokens = max_new_tokens."
+
+### "Walk me through the full pipeline from training to deployment"
+
+"Five stages: (1) Fine-tune with QLoRA on 24GB GPU — 4-bit base, gradient checkpointing, r=2 adapter. 13 minutes. (2) Merge LoRA adapter into base weights — produces full FP16 checkpoint. (3) Apply GPTQ or NF4 quantization to merged checkpoint — reduces from 13.5GB to 3.9GB, fits in 5GB VRAM. (4) Validate quality gate — ROUGE-L within 0.5pt of fine-tuned FP16. (5) Serve with vLLM using the quantized checkpoint. The key insight is that steps 1-3 are a pipeline: train cheap, merge, compress for deployment. Each step has a different cost-quality tradeoff."
 
 ---
 

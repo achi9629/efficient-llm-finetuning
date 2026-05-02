@@ -99,7 +99,7 @@ def run_inference(model: AutoModelForCausalLM,
                            return_tensors = 'pt', 
                            truncation = True, 
                            max_length = max_input_len
-                        ).to(model.device)
+                        ).to(next(model.parameters()).device)
         
         # Generate
         with torch.inference_mode():
