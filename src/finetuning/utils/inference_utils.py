@@ -7,7 +7,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 def run_inference(model: AutoModelForCausalLM,
                   tokenizer: AutoTokenizer,
                   data_config: dict,
-                  eval_config: dict) -> list[dict]:
+                  eval_config: dict,
+                  eval_samples: list[dict] = None) -> list[dict]:
     
     """
     Description:
@@ -43,6 +44,11 @@ def run_inference(model: AutoModelForCausalLM,
                     - no_repeat_ngram_size (int): N-gram size to avoid repetition
                     - temperature (float): Sampling temperature for diversity control
                     - do_sample (bool): Whether to use sampling instead of greedy decoding
+        eval_samples (list[dict], optional): A list of dataset samples to use for inference.
+            Each sample should be a dictionary containing the input and target fields as specified in 
+            data_config. If None, the dataset will be loaded from the local path specified in data_config. 
+            This parameter allows for flexibility in testing with a subset of the dataset or custom samples 
+            without modifying the dataset loading logic.
     Returns:
         list[dict]: A list of prediction dictionaries, each containing:
             - input (str): The formatted prompt truncated to 500 characters
@@ -69,10 +75,13 @@ def run_inference(model: AutoModelForCausalLM,
     # Due to proxy issue load_dataset direclty won't work, 
     # so we have to manually download the dataset and load it from local path
     # dataset = load_dataset(dataset_name, dataset_config, split = test_split)
-    dataset = load_dataset(os.path.join('assets/datasets', 
-                                        dataset_name, 
-                                        dataset_config), 
-                                        split = test_split)
+    if eval_samples is None:
+        dataset = load_dataset(os.path.join('assets/datasets', 
+                                            dataset_name, 
+                                            dataset_config), 
+                                            split = test_split)
+    else:
+        dataset = eval_samples
     
     predictions = []
     

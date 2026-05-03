@@ -1,0 +1,5 @@
+sensitivity:
+  samples: "test[:200]"
+  bits: 4
+  threshold: 0.005
+  output_dir: outputs/reports
