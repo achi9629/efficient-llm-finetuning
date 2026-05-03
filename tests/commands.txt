@@ -9,3 +9,6 @@ CUDA_VISIBLE_DEVICES=3 PYTHONPATH=src python -W ignore::DeprecationWarning -m py
 
 # test_ptq_pipeline
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python -W ignore::DeprecationWarning -W ignore::FutureWarning -m pytest tests/test_ptq_pipeline.py -v --log-cli-level=INFO
+
+# test_sensitivity
+CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python -W ignore::DeprecationWarning -W ignore::FutureWarning -m pytest tests/test_sensitivity.py -v --log-cli-level=INFO
