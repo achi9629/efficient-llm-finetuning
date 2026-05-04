@@ -112,6 +112,15 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 
 15. **Throughput (tok/s) is not comparable between base and fine-tuned models.** The base model generates verbose paragraphs (~200+ tokens, often hitting max_new_tokens=256). Fine-tuned models produce concise bullet summaries (~30-60 tokens, early EOS). Since tok/s = generated_tokens / (prefill_time + decode_time), different generation lengths change how prefill overhead is amortized. Compare throughput **within** the same model family only.
 
+### Phase B — Per-Layer Sensitivity (Day 9)
+
+16. **Mid-network blocks degrade most under INT4, not first/last.** Per-layer sweep (150 samples, simulated INT4 quantize-dequantize) found blocks 14 (-0.72pt), 26 (-0.62pt), 19 (-0.55pt) as top-3 most sensitive. Block 0 ranked 15th. Contradicts the common assumption that embedding-adjacent layers are most fragile.
+17. **Output projections (`down_proj`, `o_proj`) are the sensitive module types.** MLP output projection (-0.29pt) and attention output projection (-0.11pt) degrade most when quantized across all 32 blocks. These feed directly into the residual stream — rounding errors propagate immediately.
+18. **Single-layer INT4 quantization is survivable.** Worst single-block drop was -0.72pt. The larger drops seen in full PTQ (Day 7-8) come from cumulative error across all 32 blocks simultaneously, not any single catastrophic layer.
+
+![Per-block ROUGE-L delta under INT4](../assets/plots/sensitivity_per_block.png)
+![Per-module ROUGE-L delta under INT4](../assets/plots/sensitivity_per_module.png)
+
 ---
 
 ## 5. KPI Budget Check

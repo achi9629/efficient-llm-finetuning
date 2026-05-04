@@ -171,3 +171,29 @@ if not hasattr(peft.peft_model, 'PEFT_TYPE_TO_MODEL_MAPPING'):
 **Fix:** Not a bug — this is correct behavior. NF4 is genuinely faster for single-request autoregressive serving. The "quantization = slower" intuition only holds for compute-bound workloads (large batches, prefill phase).
 
 **Takeaway:** For single-request serving, 4-bit quantization wins on both VRAM and latency. The tradeoff only becomes real at high batch sizes where the workload becomes compute-bound and dequantization overhead is no longer hidden.
+
+---
+
+## 13. Mid-network blocks are most INT4-sensitive, not first/last
+
+**Observation:** Per-layer sensitivity sweep (150 samples, simulated INT4 quantize-dequantize)
+showed blocks 14, 26, 19 as the top-3 most degraded (-0.72, -0.62, -0.55 pt ROUGE-L).
+First block (0) ranked only 15th. Last block (31) ranked 5th.
+
+**Per-module finding:** `down_proj` (MLP output) is the most sensitive module type (-0.29 pt),
+followed by `o_proj` (attention output, -0.11 pt). Output projections directly affect the
+residual stream, amplifying rounding errors.
+
+**Surprising result:** Quantizing some blocks *improved* ROUGE-L (blocks 10, 17: +0.7 pt).
+This is a noise-injection regularization effect on a small eval set — not a real quality gain.
+Must not be interpreted as "quantization helps."
+
+**Impact:** Selective QAT (Day 10) should target blocks 14, 26, 19 rather than
+first/last blocks. Also prioritize `down_proj` and `o_proj` modules within those blocks.
+
+**Interview takeaway:** "Not all layers are equally sensitive to quantization. I ran a
+per-layer sweep and found mid-network blocks 14 and 26 degrade 4× more than early blocks
+under INT4. This informed selective QAT targeting."
+
+![Per-block ROUGE-L delta](../../assets/plots/sensitivity_per_block.png)
+![Per-module ROUGE-L delta](../../assets/plots/sensitivity_per_module.png)
