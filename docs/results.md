@@ -116,7 +116,7 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 
 16. **Mid-network blocks degrade most under INT4, not first/last.** Per-layer sweep (150 samples, simulated INT4 quantize-dequantize) found blocks 14 (-0.72pt), 26 (-0.62pt), 19 (-0.55pt) as top-3 most sensitive. Block 0 ranked 15th. Contradicts the common assumption that embedding-adjacent layers are most fragile.
 17. **Output projections (`down_proj`, `o_proj`) are the sensitive module types.** MLP output projection (-0.29pt) and attention output projection (-0.11pt) degrade most when quantized across all 32 blocks. These feed directly into the residual stream — rounding errors propagate immediately.
-18. **Single-layer INT4 quantization is survivable.** Worst single-block drop was -0.72pt. The larger drops seen in full PTQ (Day 7-8) come from cumulative error across all 32 blocks simultaneously, not any single catastrophic layer.
+18. **Single-block INT4 quantization is survivable.** The sensitivity sweep quantizes **one block at a time** (the other 31 stay FP16) and measures the isolated ROUGE-L drop. The worst single-block drop was only -0.72pt (block 14). This means no individual block is catastrophically fragile — the model can tolerate INT4 rounding in any single block without major quality loss.
 
 ![Per-block ROUGE-L delta under INT4](../assets/plots/sensitivity_per_block.png)
 ![Per-module ROUGE-L delta under INT4](../assets/plots/sensitivity_per_module.png)

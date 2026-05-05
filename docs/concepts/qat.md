@@ -245,7 +245,7 @@ Over epochs:
 - Mid epochs: Optimizer learns which weights matter most under quantization
 - Late epochs: Weights converge to values that maintain task performance even after quantization
 
-### Comparison: QAT vs Post-Hoc Quantization
+### Comparison: QAT vs Post-Hoc Quantization (PTQ)
 
 ```bash
 PTQ (GPTQ):
@@ -271,23 +271,19 @@ Epoch 20 (converged):
 
 ## Quality vs Training Cost Tradeoff
 
-```bash
 Quality recovery (ROUGE-L) vs Training Cost for Mistral-7B to INT4
 
-        Quality
-        │
-  100%  │ ████████████ fp16 baseline
-        │ ████████████ QLoRA baseline (frozen base, only adapters)
-   99%  │ ███████████████ Full QAT (40-60% extra cost)
-   98%  │ ███████████ Layer-selective QAT (20-30% extra cost)
-   97%  │ ██████████ Hybrid PTQ + QAT (10-20% extra cost)
-   96%  │ ████████ PTQ INT4 (GPTQ/AWQ, calibration only)
-   94%  │ ████ PTQ INT4 naive (round-to-nearest)
-        │
-        └──────────────────────────
-          0%   20%   40%   60%   100%
-          Training Cost
-```
+| Method              | Quality Retained | ROUGE-L Loss    | Extra Training Cost    | When to use                        |
+|---------------------|:----------------:|:---------------:|:----------------------:|------------------------------------|
+| fp16 baseline       | 100%             | 0               | reference              | No quantization needed             |
+| QLoRA baseline      | 100%             | 0               | reference              | Adapters stay fp16                 |
+| Full QAT            | ~99%             | -0.1 to -0.5 pt | 40-60% of fine-tuning  | PTQ quality unacceptable           |
+| Layer-selective QAT | ~98%             | -0.3 to -0.8 pt | 20-30% of fine-tuning  | Quality-critical + budget-limited  |
+| Hybrid PTQ + QAT    | ~97%             | -0.5 to -1.0 pt | 10-20% of fine-tuning  | Cheapest QAT option                |
+| PTQ INT4 (GPTQ/AWQ) | ~96%             | -0.5 to -2.0 pt | ~0% (calibration only) | Default choice for most projects   |
+| PTQ INT4 naive      | ~94%             | -3 to -8 pt     | 0%                     | Never use this                     |
+
+**Takeaway:** GPTQ/AWQ gives you 96% quality for free. Each additional 1% of quality recovery costs 10-20% more GPU hours. Most projects stop at PTQ.
 
 ## QAT in the Project Pipeline
 

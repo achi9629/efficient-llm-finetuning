@@ -8,6 +8,13 @@ After fine-tuning, your model weights are in fp16/bf16. For Mistral-7B that mean
 - Each concurrent request adds KV cache memory on top
 - Throughput is bottlenecked by memory bandwidth (weight loading dominates over compute for autoregressive generation)
 
+  > **Why weight loading dominates:** During autoregressive generation, the model produces one token at a time. For each token, the GPU must load the **entire** weight matrices from HBM (high-bandwidth memory) into SRAM (on-chip compute cores) to perform:
+  > - **Q/K/V projections**: $W_Q, W_K, W_V \in \mathbb{R}^{d \times d_{head} \times n_{heads}}$ — three matmuls per attention layer
+  > - **Output projection**: $W_O \in \mathbb{R}^{d \times d}$
+  > - **FFN layers**: $W_{up} \in \mathbb{R}^{d \times 4d}$, $W_{down} \in \mathbb{R}^{4d \times d}$ — two large matmuls per layer
+  >
+  > Each of these is a matrix-vector multiply (weight matrix × single token's hidden state), giving arithmetic intensity of ~1 FLOP/byte. An A100 needs ~156 FLOPs/byte to saturate compute. So the GPU spends nearly all its time shuttling weights from HBM → SRAM, not computing. Quantizing to 4-bit shrinks weights ~4×, meaning the same bandwidth delivers ~4× more tokens/second — the compute was never the bottleneck.
+
 PTQ compresses weights **after training is done** — no retraining, no gradient computation, no GPU hours. You take a trained checkpoint and make it smaller and faster for serving.
 
 ## Core Idea
@@ -124,10 +131,12 @@ Where $a_i$ is the average activation magnitude for channel $i$.
 
 **Algorithm**:
 
-1. Run calibration data, record per-channel activation magnitudes
-2. Identify salient channels (top 1% by activation magnitude)
-3. Scale salient channels up before quantization (protecting them from rounding error)
-4. Scale corresponding subsequent layers down to compensate
+1. Run calibration data, record per-channel activation magnitudes $|\bar{a}_j|$
+2. Compute per-channel scaling factors: channels with larger activations get proportionally larger scales (continuous, not a hard cutoff — the library auto-searches for optimal scaling exponent $\alpha$)
+3. Scale weight channels up before quantization (protecting high-activation channels from rounding error)
+4. Scale corresponding subsequent layers down to compensate (mathematically equivalent output)
+
+> **Note:** There is no user-facing "percentage" parameter. The `autoawq` library internally searches for the optimal $\alpha$ that minimizes quantization error across all channels simultaneously. The "salient channels" concept is a smooth weighting, not a binary threshold.
 
 ```python
 from awq import AutoAWQForCausalLM
@@ -203,19 +212,17 @@ Group size 128 means one scale/zero-point per 128 weights. Smaller groups = more
 
 ## Quality vs Bit-Width: The Quality Cliff
 
-```bash
-Quality (ROUGE-L)
-  |
-  |  ████████████████████████  fp16 (baseline)
-  |  ███████████████████████   INT8 naive (~<1 pt drop)
-  |  ██████████████████████    INT8 SmoothQuant (~<0.5 pt)
-  |  ████████████████████      INT4 GPTQ (~0.5-1 pt drop)
-  |  ███████████████████       INT4 AWQ (~0.5-1 pt drop)
-  |  ██████████████            INT4 naive (3-8 pt drop) <- quality cliff
-  |  █████████                 INT3 (usually unacceptable)
-  |
-  +---------------------------- Bit-width ->
-```
+| Method           | Bits | ROUGE-L Loss  | Quality Retained | Notes                                       |
+|------------------|:----:|:-------------:|:----------------:|---------------------------------------------|
+| fp16 (baseline)  | 16   | 0             | 100%             | No quantization                             |
+| INT8 SmoothQuant | 8    | ~<0.5 pt      | ~99%             | W8A8, best INT8                             |
+| INT8 naive       | 8    | ~<1 pt        | ~98%             | Simple round-to-nearest, still fine         |
+| INT4 GPTQ        | 4    | -0.5 to -1 pt | ~96-98%          | Hessian-based compensation                  |
+| INT4 AWQ         | 4    | -0.5 to -1 pt | ~96-98%          | Activation-aware scaling                    |
+| INT4 naive       | 4    | -3 to -8 pt   | ~80-93%          | **Quality cliff** — unusable for most tasks |
+| INT3             | 3    | -5 to -15 pt  | <85%             | Usually unacceptable                        |
+
+**The cliff is at INT4 naive** — this is where calibration-aware methods (GPTQ, AWQ) earn their keep. Without calibration, INT4 is often unusable. With calibration, INT4 is practical.
 
 **The cliff is at INT4 naive** — this is where calibration-aware methods (GPTQ, AWQ) earn their keep. Without calibration, INT4 is often unusable. With calibration, INT4 is practical.
 
