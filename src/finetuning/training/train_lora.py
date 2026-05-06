@@ -207,7 +207,8 @@ def train(model: AutoModelForCausalLM,
           tokenizer: AutoTokenizer,
           train_dataset: Dataset, 
           valid_dataset: Dataset, 
-          train_lora: dict,) -> None:
+          train_lora: dict,
+        ) -> None:
     
     """
     Description:

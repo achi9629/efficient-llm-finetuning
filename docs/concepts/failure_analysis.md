@@ -197,3 +197,47 @@ under INT4. This informed selective QAT targeting."
 
 ![Per-block ROUGE-L delta](../../assets/plots/sensitivity_per_block.png)
 ![Per-module ROUGE-L delta](../../assets/plots/sensitivity_per_module.png)
+
+---
+
+## 14. QAT training produces NaN gradients — fp16 model + bf16 training
+
+**Observation:** Loading the merged LoRA model in `float16` (via `model_config.yaml`) and
+training with `bf16: true` (via `qat_config.yaml`) produced loss = 70,954 and `grad_norm: nan`
+on the very first step. Even with fake-quant and freeze disabled, loss was nonsensical.
+
+**Root cause:** When base weights are fp16 and `requires_grad=True`, the backward pass
+computes gradients in fp16 precision. But Trainer's bf16 autocast produces bf16 activations
+in the forward pass. This fp16↔bf16 mixing during backprop causes overflow → NaN.
+LoRA training never hit this because frozen fp16 weights don't participate in backward pass —
+only the fp32 LoRA adapters (lora_A, lora_B) receive gradients.
+
+**Fix:** Load the model in bf16 (`model_config['model']['torch_dtype'] = 'bfloat16'`) to
+match the training dtype. Rule: weight dtype must match training precision when those weights
+have `requires_grad=True`.
+
+**Interview takeaway:** "LoRA hides the fp16/bf16 mismatch because frozen weights don't
+backprop. The moment we unfroze layers for QAT, the same config exploded. Lesson: full/partial
+fine-tuning requires weight dtype = training dtype."
+
+---
+
+## 15. Using `.data` in fake-quant forward kills STE gradient flow
+
+**Observation:** Initial implementation of `FakeQuantLinear.forward()` used
+`W = self.linear.weight.data` to access weights. Training ran but weights never updated —
+loss stayed flat, no learning occurred.
+
+**Root cause:** `.data` returns the raw tensor detached from the autograd graph. The STE
+(straight-through estimator) trick `w_fake = quant(W).detach() + W - W.detach()` requires
+`W` to be a graph-connected tensor so that gradients flow through the `+ W` path. With
+`.data`, `W` has no grad_fn → the entire STE expression is detached → optimizer step is a
+no-op (zero gradients for the weight).
+
+**Fix:** Use `W = self.linear.weight` (without `.data`). This preserves the computation
+graph connection. The `.detach()` calls inside the STE expression are intentional and
+correct — they only detach the quantized path, not the weight itself.
+
+**Interview takeaway:** "Never use `.data` when you need gradients. In QAT, the fake-quant
+layer must keep the weight attached to the graph for STE to work. `.data` silently kills
+training without any error or warning."

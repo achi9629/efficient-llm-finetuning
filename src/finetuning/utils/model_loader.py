@@ -38,6 +38,8 @@ def load_model_and_tokenizer(model_config: dict) -> tuple[AutoModelForCausalLM, 
     padding_side = model_config['tokenizer']['padding_side']
     max_length = model_config['tokenizer']['max_length']
     
+    print('Model ID:', model_id)
+    
     model = AutoModelForCausalLM.from_pretrained(model_id, 
                                                  torch_dtype = torch_dtype, 
                                                  device_map = device_map, 

@@ -377,35 +377,78 @@ QAT is primarily useful for weight quantization; TensorRT adds activation quanti
 
 ## QAT in Our Repo
 
-Our `qat_config.yaml` specifies:
+We use **layer-selective QAT** — only the most sensitive layers (identified by Day 9 sensitivity sweep) get fake-quant observers and gradient updates. Everything else stays frozen in bf16.
+
+### Architecture
+
+```
+src/finetuning/quantization/
+├── qat_pipeline.py       # Orchestration: load → insert observers → freeze → train → export
+├── fake_quant_layer.py   # FakeQuantLinear: STE-based fake quantization wrapper
+└── sensitivity.py        # Per-layer sensitivity sweep (feeds QAT targets)
+```
+
+### Key Components
+
+**`FakeQuantLinear`** — wraps an `nn.Linear` with simulated INT4 quantize-dequantize in the forward pass. Uses the straight-through estimator (STE) for gradient flow:
+
+```python
+W = self.linear.weight                    # keep attached to graph
+W_q = clamp(round(W / scale), -8, 7)     # quantize (non-differentiable)
+w_fake = (W_q * scale).detach() + W - W.detach()  # STE trick
+return F.linear(x, w_fake, bias)          # forward uses quantized weights
+```
+
+**`freeze_non_target_params`** — sets `requires_grad=False` on all parameters except those in target blocks × target modules. Only ~226M params (6 layers × 2 module types) are trainable.
+
+**`export_quantized_model`** — after training, strips `FakeQuantLinear` wrappers and saves the adapted `nn.Linear` weights. These weights have learned to be robust to INT4 rounding.
+
+### Config (`configs/qat_config.yaml`)
 
 ```yaml
 qat:
-  base_model: "assets/models/Mistral-7B-v0.3"
-  bits: 4  # INT4
-  num_epochs: 3
-  learning_rate: 1e-5
-  warmup_steps: 100
-  quantize_layers: "all"  # Options: "all", "sensitive", "attention"
+  sensitivity_path: outputs/reports/sensitivity_150
+  block_top_k: 3          # top-3 sensitive blocks: 14, 26, 19
+  module_top_k: 2         # top-2 sensitive modules: down_proj, o_proj
+  bits: 4
+  model:
+    torch_dtype: bfloat16  # MUST match training dtype (see failure_analysis #14)
+  dataset:
+    train_split: "train[:2000]"
+    val_split: "validation[:200]"
+  training:
+    num_train_epochs: 2
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 2.0e-5
+    warmup_steps: 20
+    lr_scheduler_type: cosine
+    bf16: true
 ```
 
-Run with:
+### Run Command
 
 ```bash
-python src/finetuning/quantization/qat_pipeline.py \
-    --base_model assets/models/Mistral-7B-v0.3 \
-    --train_data assets/datasets/cnn_dailymail \
-    --output_dir outputs/qat_mistral_int4 \
-    --bits 4
+python -m src.finetuning.quantization.qat_pipeline \
+    --lora_model_path assets/models/lora_peft_merged_r2_mistral_7b_v0.3
 ```
 
-This will:
+### Pipeline Flow
 
-1. Load the base Mistral model
-2. Insert quantization-aware training nodes
-3. Fine-tune on CNN/DailyMail for 3 epochs (with quantization simulation)
-4. Convert to actual INT4 model
-5. Evaluate ROUGE-L vs baseline
+1. Load LoRA-merged model in **bf16** (not fp16 — see failure_analysis #14)
+2. Read `sensitivity_per_block.csv` → select top-3 blocks (14, 26, 19)
+3. Read `sensitivity_per_module.csv` → select top-2 modules (down_proj, o_proj)
+4. Replace target `nn.Linear` layers with `FakeQuantLinear` wrappers
+5. Freeze all non-target parameters
+6. Fine-tune ~125 steps (2000 samples, bs=4, grad_accum=4, 2 epochs)
+7. Strip fake-quant wrappers → save adapted weights
+
+### Critical Lessons Learned
+
+- **bf16 required:** fp16 model + bf16 training causes NaN gradients (failure #14)
+- **Right-pad for training:** `tokenizer.padding_side = "right"` — left-pad corrupts loss
+- **No `.data` in fake-quant:** `self.linear.weight.data` kills STE gradient flow (failure #15)
+- **Short training suffices:** Model is already fine-tuned; QAT only needs to adapt weights to quantization noise
 
 ## Summary Table: PTQ vs QAT
 

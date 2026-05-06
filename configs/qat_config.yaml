@@ -1,0 +1,26 @@
+qat:
+  sensitivity_path: outputs/reports/sensitivity_150
+  block_top_k: 3
+  module_top_k: 2
+  bits: 4
+  dataset:
+    train_split: "train[:2000]"
+    val_split: "validation[:200]"
+  model:
+    torch_dtype: bfloat16 # REQUIRED: fp16 + bf16 training causes NaN grads (see failure_analysis #14)
+  training:
+    output_dir: outputs/checkpoints/qat
+    logging_dir: outputs/runs/qat
+    report_to: tensorboard
+    num_train_epochs: 2
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 2.0e-6
+    warmup_steps: 20
+    lr_scheduler_type: cosine
+    bf16: true
+    max_grad_norm: 1.0
+    logging_steps: 10
+    save_strategy: steps
+    seed: 42
+    save_steps: 50
