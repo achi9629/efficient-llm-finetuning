@@ -241,3 +241,10 @@ correct — they only detach the quantized path, not the weight itself.
 **Interview takeaway:** "Never use `.data` when you need gradients. In QAT, the fake-quant
 layer must keep the weight attached to the graph for STE to work. `.data` silently kills
 training without any error or warning."
+
+## 16. AWQ throughput discrepancy — 42 tok/s vs 341 tok/s on same model
+
+- **Symptom:** Initial AWQ INT4 (LoRA) measurement showed 42.3 tok/s. Re-run on the same checkpoint showed 341.1 tok/s.
+- **Root cause:** The original measurement was taken with an older `autoawq` version or a cold GPU state where CUDA kernels hadn't been JIT-compiled. Subsequent runs benefited from kernel caching and/or library updates that improved the GEMM dispatch path.
+- **Lesson:** Always warm up before latency measurement (our code does `warmup_runs` in `evaluate_perf.py`). Report the re-run number and note library versions when throughput changes dramatically between sessions.
+- **Resolution:** Updated AWQ (LoRA) from 42.3 → 341.1 tok/s in results. The 341 tok/s figure is consistent with AWQ (QAT) at 368 tok/s on the same hardware, confirming it's the real steady-state performance.

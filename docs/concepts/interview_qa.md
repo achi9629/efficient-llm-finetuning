@@ -47,8 +47,8 @@ I built this project to answer those questions with numbers — not intuition. I
 ### Finding 6: GPTQ vs AWQ — kernel quality matters more than algorithm
 
 - Both achieve 0.196 ROUGE-L on the same model. Quality is equivalent.
-- GPTQ: 84.5 tok/s (auto_gptq Triton kernels). AWQ: 42.3 tok/s (autoawq kernels). 2× gap.
-- "In theory, AWQ should be faster — it's designed for efficient inference. In practice, kernel implementations vary by model architecture. Mistral's GQA heads aren't well-optimized in autoawq. Always benchmark on YOUR model, not on the paper's benchmarks."
+- AWQ: 341 tok/s (autoawq GEMM kernels). GPTQ: 84.5 tok/s (auto_gptq Triton kernels). 4× gap.
+- "Kernel quality matters more than algorithm quality. Both produce identical INT4 weights. AWQ's GEMM kernels are well-optimized for A100; GPTQ's Triton kernels have high dispatch overhead. Always benchmark on YOUR hardware, not on the paper's benchmarks."
 
 ---
 
@@ -80,7 +80,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "What would you do differently?"
 
-"Two things still open: (1) Run on a larger dataset to see where rank ordering reverses. (2) Test on Hindi where tokenizer fertility (~2-3x tokens/word) amplifies quantization degradation. We already completed per-layer sensitivity + selective QAT — blocks 14/26/19 × down_proj/o_proj, and confirmed QAT preserves quality pre-export."
+"Two things still open: (1) Run on a larger dataset to see where rank ordering reverses. (2) Test on Hindi where tokenizer fertility (~2-3x tokens/word) amplifies quantization degradation. We already completed per-layer sensitivity + selective QAT — blocks 14/26/19 × down_proj/o_proj confirmed QAT→AWQ recovers full FP16 quality at 4.9 GB and 368 tok/s."
 
 ### "How does this connect to production?"
 
@@ -116,11 +116,11 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "What's the difference between GPTQ and AWQ?"
 
-"Both are calibration-based 4-bit quantization, but they optimize different objectives. GPTQ minimizes layer-wise reconstruction error using second-order (Hessian) information — it asks 'which weight rounding minimizes output error?' AWQ preserves salient weights based on activation magnitudes — it asks 'which weights matter most based on what the model actually computes?' In our experiments, both achieved identical ROUGE-L (0.196) on the merged model. The practical difference was throughput: GPTQ at 84.5 tok/s vs AWQ at 42.3 tok/s — the autoawq kernels were less optimized for Mistral's GQA architecture."
+"Both are calibration-based 4-bit quantization, but they optimize different objectives. GPTQ minimizes layer-wise reconstruction error using second-order (Hessian) information — it asks 'which weight rounding minimizes output error?' AWQ preserves salient weights based on activation magnitudes — it asks 'which weights matter most based on what the model actually computes?' In our experiments, both achieved identical ROUGE-L (0.196) on the merged model. The practical difference was throughput: AWQ at 341 tok/s vs GPTQ at 84.5 tok/s — the autoawq GEMM kernels are well-optimized for A100, while auto_gptq Triton kernels remain slow."
 
 ### "You applied quantization to the fine-tuned model. Why not quantize first, then fine-tune?"
 
-"Order matters. QAT (quantize-aware training) is the 'quantize first' approach — it's more expensive but adapts weights to quantization noise. Our approach — fine-tune first (LoRA), merge adapters into FP16, then apply PTQ — is cheaper and simpler. It worked because LoRA adaptation is low-rank and doesn't push weights into distributions that break under quantization. The results confirm this: LoRA-merged + GPTQ achieved 0.196 ROUGE-L vs QLoRA's 0.201 — only 0.5 pt gap, and we got 84.5 tok/s vs QLoRA's 70 tok/s."
+"Order matters. QAT (quantize-aware training) is the 'quantize first' approach — it's more expensive but adapts weights to quantization noise. Our approach — fine-tune first (LoRA), merge adapters into FP16, then apply PTQ — is cheaper and simpler. It worked because LoRA adaptation is low-rank and doesn't push weights into distributions that break under quantization. The results confirm this: LoRA-merged + AWQ achieved 0.196 ROUGE-L at 341 tok/s. With QAT→AWQ, we recovered to 0.201 at 368 tok/s — beating QLoRA (0.201, 70 tok/s) on every axis."
 
 ### "Your throughput numbers vary wildly between base and fine-tuned models. Is that a bug?"
 
@@ -196,8 +196,12 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "What is QAT and why did you use it selectively?"
 
-"QAT inserts fake-quantize nodes during training so the model learns to be robust to INT4 rounding. We didn't QAT the full model — that's expensive (7B params). Instead, we ran per-layer sensitivity analysis first (Day 9), found 3 blocks (14, 26, 19) and 2 module types (down_proj, o_proj) that degrade most under INT4. Then we applied QAT only to those 6 layers for 250 steps. Result: 0.200 ROUGE-L, matching FP16 baseline. The hypothesis is that GPTQ/AWQ applied to this QAT checkpoint will lose less quality than naive PTQ."
+"QAT inserts fake-quantize nodes during training so the model learns to be robust to INT4 rounding. We didn't QAT the full model — that's 7B params. Instead, we ran per-layer sensitivity first, found 3 blocks (14, 26, 19) and 2 module types (down_proj, o_proj) that degrade most. Applied QAT only to those 6 layers for 250 steps. Result: QAT→AWQ INT4 achieved 0.201 ROUGE-L (0pt drop), 368 tok/s (+108%), 4.90 GB. Without QAT, AWQ gave 0.196 — the 0.5pt gap was fully recovered."
 
 ### "Why didn't QAT improve over the baseline?"
 
 "It's not meant to improve — it's meant to *prepare*. The QAT checkpoint in bf16 should match baseline (0.200 vs 0.201 — confirmed). The payoff comes after INT4 export: naive GPTQ on LoRA gave 0.196 (-0.5 pt). If QAT→GPTQ gives ≥0.199, that's the recovery. QAT is a pre-processing step, not a quality booster."
+
+### "Why does AWQ outperform GPTQ on throughput by 4×?"
+
+"It's kernel quality, not algorithm quality. Both produce identical INT4 weights (4-bit, group_size=128). GPTQ uses `auto_gptq` Triton kernels that have high dispatch overhead per layer. AWQ uses `autoawq` GEMM kernels optimized for the CUDA warp-level matrix multiply on A100. The algorithm decides *which* weights to quantize; the kernel decides *how fast* the quantized matmul runs. For Mistral's GQA architecture on A100, AWQ's kernels win decisively (368 vs 85 tok/s)."

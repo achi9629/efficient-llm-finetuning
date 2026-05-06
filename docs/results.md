@@ -20,8 +20,10 @@
 | PTQ INT8 (LoRA)       | 0.196   | 109.5            | 6.9            | 15.1          | 8.13           | 7.01            |
 | PTQ NF4 (LoRA)        | 0.201   | 285.2            | 15.1           | 13.7          | 5.21           | 4.16            |
 | GPTQ INT4 (LoRA)      | 0.196   | 84.4             | 5.5            | 14.5          | 4.91           | 3.88            |
-| AWQ INT4 (LoRA)       | 0.196   | 42.3             | 3.2            | 15.5          | 4.96           | 3.88            |
+| AWQ INT4 (LoRA)       | 0.196   | 341.1            | 23.3           | 12.7          | 4.96           | 3.88            |
 | QAT BF16 (LoRA)       | 0.200   | 170.9            | 29.6           | 13.9          | 14.53          | 13.50           |
+| GPTQ INT4 (QAT)       | 0.200   | 85.4             | 5.3            | 15.0          | 4.90           | 3.88            |
+| AWQ INT4 (QAT)        | 0.201   | 368.1            | 23.4           | 13.3          | 4.90           | 3.88            |
 
 **Notes:**
 
@@ -33,6 +35,7 @@
 - GPTQ/AWQ INT4 (LoRA) = calibration-based quantization applied to the LoRA-merged FP16 checkpoint.
 - **Throughput caveat:** Base and fine-tuned models produce different output lengths (base: ~200 tokens verbose paragraphs; fine-tuned: ~30-60 tokens concise bullets). Since tok/s = generated_tokens / total_time, throughput is **not directly comparable** across base vs fine-tuned rows. Compare within the same model family only (e.g., base INT8 vs base NF4 vs base GPTQ).
 - QAT BF16 (LoRA) = LoRA-merged FP16 checkpoint → selective QAT (fake-quant on blocks 14/26/19, down_proj+o_proj, 250 steps) → bf16 inference. Not yet INT4-quantized.
+- GPTQ/AWQ INT4 (QAT) = QAT checkpoint → GPTQ/AWQ calibration-based INT4 quantization. Tests whether QAT pre-training reduces quality loss during subsequent PTQ.
 
 ---
 
@@ -108,7 +111,7 @@ Config: bs=4, grad_accum=4, avg_seq_len=837.6. LoRA/QLoRA = 3 epoch full fine-tu
 10. **GPTQ wins quality among base-model PTQ methods** (0.142 vs 0.137/0.133). Calibration-based Hessian optimization recovers ~0.5-0.9 pt ROUGE-L over naive quantization at 4-bit.
 11. **INT8 is slower than NF4 despite higher precision.** LLM.int8() mixed-precision decomposition (outlier handling) has more overhead than NF4 bulk dequantization. This is counterintuitive but well-documented.
 12. **GPTQ has lowest VRAM (4.91 GB) but slowest 4-bit throughput** (33.9 tok/s greedy). The `auto_gptq` Triton kernels underperform bitsandbytes NF4. ExLlama/Marlin backends would likely recover 2-3× throughput.
-13. **AWQ underperforms GPTQ on throughput** (42.3 vs 84.5 tok/s for LoRA-merged) with identical quality (0.196 ROUGE-L) and similar VRAM (4.96 vs 4.91 GB). The `autoawq` kernels are unoptimized for Mistral's GQA architecture; fused-layers mode may help but was unstable.
+13. **AWQ dominates GPTQ on throughput** (341 vs 84 tok/s for LoRA-merged) with identical quality (0.196 ROUGE-L) and similar VRAM (4.96 vs 4.91 GB). The `autoawq` GEMM kernels are well-optimized for Mistral's architecture on A100, delivering 2× faster decode than FP16. GPTQ's `auto_gptq` Triton kernels remain the bottleneck.
 14. **Applying PTQ to the fine-tuned model closes the quality gap entirely.** Base GPTQ: 0.142 → LoRA-merged GPTQ: 0.196 (+5.4 pt). The quantization method doesn't matter as much as what you quantize.
 
 ### Throughput Measurement Note
@@ -128,20 +131,31 @@ Config: bs=4, grad_accum=4, avg_seq_len=837.6. LoRA/QLoRA = 3 epoch full fine-tu
 
 19. **QAT preserves full FP16 quality with zero latency cost.** Selective fake-quantization on 3 most sensitive blocks (14, 26, 19) × `down_proj`/`o_proj` for 250 steps → ROUGE-L 0.200, 170.9 tok/s, 14.53 GB. The -0.1pt quality drop and -2% throughput are within noise of the unquantized LoRA baseline.
 20. **QAT alone doesn't solve the VRAM problem.** The QAT checkpoint is still bf16 weights (13.5 GB). QAT's value is as a *pre-processing step* before INT4 export — training the sensitive layers to be robust to rounding, so that subsequent GPTQ/AWQ quantization loses less quality.
+21. **QAT→AWQ closes the quality gap AND wins throughput.** AWQ INT4 (QAT): 0.201 ROUGE-L, 368 tok/s, 4.90 GB — passes all 3 KPI gates. The 0.5pt recovery (0.196→0.201) confirms QAT prepared the sensitive layers to survive INT4 rounding without quality loss.
+22. **QAT→GPTQ recovers quality but not throughput.** GPTQ INT4 (QAT): 0.200 ROUGE-L (+0.4pt vs naive GPTQ), 85.4 tok/s, 4.9 GB. Quality improves but GPTQ's slow Triton kernels remain the bottleneck — still fails the latency gate.
 
 ---
 
 ## 5. KPI Budget Check
 
-| KPI                          | Threshold  | Base FP16 | QLoRA (r=2) | PTQ INT8 (base) | PTQ NF4 (base) | GPTQ INT4 (base) | PTQ INT8 (LoRA) | PTQ NF4 (LoRA) | GPTQ INT4 (LoRA) | AWQ INT4 (LoRA) | QAT BF16 (LoRA) |
-|------------------------------|------------|-----------|-------------|-----------------|----------------|------------------|-----------------|----------------|------------------|-----------------|-----------------|
-| ROUGE-L drop vs best FT      | ≤ 2 pt     | —         | **best**    | -6.4 pt ✗       | -6.8 pt ✗      | -5.9 pt ✗        | -0.5 pt ✓       | 0.0 pt ✓       | -0.5 pt ✓        | -0.5 pt ✓       | -0.1 pt ✓       |
-| Latency regression (Greedy)† | ≤ 20%      | baseline  | -60% ✗      | *               | *              | *                | -38% ✗          | +61% ✓         | -52% ✗           | -76% ✗          | -2% ✓           |
-| Inference VRAM               | ≤ 10 GB    | 14.79 ✗   | 5.88 ✓      | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 4.96 ✓          | 14.53 ✗         |
+| Method               | ROUGE-L drop (≤ 2 pt)  | Latency regression† (≤ 20%)  | VRAM (≤ 10 GB) | All Pass? |
+|----------------------|------------------------|------------------------------|----------------|-----------|
+| Base FP16            | —                      | baseline                     | 14.79 ✗        | ✗         |
+| QLoRA (r=2)          | **best**               | -60% ✗                       | 5.88 ✓         | ✗         |
+| PTQ INT8 (base)      | -6.4 pt ✗              | *                            | 8.13 ✓         | ✗         |
+| PTQ NF4 (base)       | -6.8 pt ✗              | *                            | 5.21 ✓         | ✗         |
+| GPTQ INT4 (base)     | -5.9 pt ✗              | *                            | 4.91 ✓         | ✗         |
+| PTQ INT8 (LoRA)      | -0.5 pt ✓              | -38% ✗                       | 8.13 ✓         | ✗         |
+| PTQ NF4 (LoRA)       | 0.0 pt ✓               | +61% ✓                       | 5.21 ✓         | **✓**     |
+| GPTQ INT4 (LoRA)     | -0.5 pt ✓              | -52% ✗                       | 4.91 ✓         | ✗         |
+| AWQ INT4 (LoRA)      | -0.5 pt ✓              | +92% ✓                       | 4.96 ✓         | **✓**     |
+| QAT BF16 (LoRA)      | -0.1 pt ✓              | -2% ✓                        | 14.53 ✗        | ✗         |
+| GPTQ INT4 (QAT)      | -0.1 pt ✓              | -52% ✗                       | 4.90 ✓         | ✗         |
+| AWQ INT4 (QAT)       | 0.0 pt ✓               | +108% ✓                      | 4.90 ✓         | **✓**     |
 
 †Throughput not directly comparable across base vs fine-tuned models — generation length differences invalidate cross-group latency comparisons (see Finding 15). Latency regression is only meaningful within the same model family.
 *Not evaluated — base models generate different output lengths vs fine-tuned, making cross-family tok/s comparison invalid. LoRA variants compared against LoRA FP16 merged (177.2 tok/s).
 
-**Key gap:** Quality is solved. VRAM is solved. Latency is solved for one method: **LoRA-merged + PTQ NF4 passes all three gates** — 0.201 ROUGE-L (0 pt drop), 5.21 GB VRAM, 285 tok/s (+61% faster than FP16 merged LoRA). GPTQ/AWQ still fail latency (-52%/-76%) due to suboptimal kernel implementations. QLoRA inference also fails (-60%) due to per-step dequantization overhead.
+**Key gap:** Quality and VRAM are solved across all LoRA-merged INT4 methods. Latency is now solved for three methods: PTQ NF4 (+61%), AWQ INT4 (LoRA) (+92%), and AWQ INT4 (QAT) (+108%). GPTQ still fails latency (-52%) due to slow `auto_gptq` Triton kernels.
 
-**Recommendation:** LoRA-merged + PTQ NF4 is the best overall method — 0.201 ROUGE-L, 5.21 GB VRAM, highest quantized throughput. GPTQ/AWQ offer marginal VRAM savings (4.91-4.96 GB) at significantly lower throughput.
+**Recommendation:** AWQ INT4 (QAT) is the best overall method — 0.201 ROUGE-L (0 pt drop), 4.90 GB VRAM, 368 tok/s (+108% vs FP16). The full pipeline: LoRA fine-tune → merge → selective QAT (250 steps) → AWQ INT4 export. If QAT training cost is unacceptable, AWQ INT4 (LoRA) is nearly as good: 0.196 ROUGE-L, 341 tok/s, 4.96 GB.

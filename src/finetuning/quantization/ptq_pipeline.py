@@ -346,6 +346,10 @@ def main():
     data_config = load_config('configs/data_config.yaml')
     eval_config = load_config('configs/eval_config.yaml')
     
+    ptq_mode = args.ptq_mode
+    name = f"ptq_{ptq_mode}"
+    ptq_mode_name = next(m for m in ptq_config['ptq']['modes'] if m['name'] == ptq_mode)
+    
     if args.adapter_type == 'lora_peft' and not os.path.exists(args.lora_saving_path):
         base = AutoModelForCausalLM.from_pretrained(model_config['model']['name'], 
                                                     torch_dtype = dtype_map[model_config['model']['torch_dtype']], 
@@ -358,12 +362,11 @@ def main():
         # Cleanup to free memory before quantization
         del base, model
         torch.cuda.empty_cache()
-    model_config['model']['name'] = args.lora_saving_path if args.adapter_type == 'lora_peft' else model_config['model']['name']
-    
-    ptq_mode = args.ptq_mode
-    name = f"ptq_{ptq_mode}"
-    ptq_mode_name = next(m for m in ptq_config['ptq']['modes'] if m['name'] == ptq_mode)
-    
+        model_config['model']['name'] = args.lora_saving_path if args.adapter_type == 'lora_peft' else model_config['model']['name']
+    elif 'qat' in args.adapter_type:
+        model_config['model']['name'] = args.adapter_path
+        ptq_mode_name['checkpoint_dir'] = args.lora_saving_path
+
     if ptq_mode == 'gptq_int4' and not os.path.exists(ptq_mode_name['checkpoint_dir']):
         quantize_gptq_and_save(model_config, data_config, ptq_mode_name)
     elif ptq_mode == 'awq_int4' and not os.path.exists(ptq_mode_name['checkpoint_dir']):

@@ -17,7 +17,7 @@ ptq:
 
     - name: gptq_int4
       # checkpoint_dir: "assets/models/GPTQ_Lora_Peft_r2_alpha_4_Mistral-7B-v0.3"
-      checkpoint_dir: "assets/models/GPTQ_Mistral-7B-v0.3"
+      checkpoint_dir: "assets/models/GPTQ_qat_block3_module2_4bits_steps250_lora_peft_merged_r2_mistral_7b_v0.3"
       bits: 4
       group_size: 128
       desc_act: false
