@@ -80,7 +80,7 @@ I built this project to answer those questions with numbers — not intuition. I
 
 ### "What would you do differently?"
 
-"Three things: (1) Run on a larger dataset to see where rank ordering reverses. (2) Add per-layer sensitivity analysis to find which transformer blocks break under INT4. (3) Test on Hindi where tokenizer fertility (~2-3x tokens/word) amplifies quantization degradation."
+"Two things still open: (1) Run on a larger dataset to see where rank ordering reverses. (2) Test on Hindi where tokenizer fertility (~2-3x tokens/word) amplifies quantization degradation. We already completed per-layer sensitivity + selective QAT — blocks 14/26/19 × down_proj/o_proj, and confirmed QAT preserves quality pre-export."
 
 ### "How does this connect to production?"
 
@@ -193,3 +193,11 @@ I built this project to answer those questions with numbers — not intuition. I
 ### "You need to fine-tune 10 different LoRA adapters. How do you schedule training on 4 GPUs?"
 
 "Each adapter trains independently — no inter-GPU communication needed. Simple job queue: 10 jobs, 4 workers. Each job: load 4-bit base + grad checkpointing → fits 24GB GPU → train → save adapter + _train_perf.json. At 13 min/job, all 10 finish in ~35 min (ceil(10/4) × 13). No need for distributed training here — LoRA adapters share no state. I'd use a SLURM array job or a simple Python multiprocessing pool. If training time matters more than GPU cost, you can skip grad checkpointing on 80GB A100s and finish in ~8 min/job."
+
+### "What is QAT and why did you use it selectively?"
+
+"QAT inserts fake-quantize nodes during training so the model learns to be robust to INT4 rounding. We didn't QAT the full model — that's expensive (7B params). Instead, we ran per-layer sensitivity analysis first (Day 9), found 3 blocks (14, 26, 19) and 2 module types (down_proj, o_proj) that degrade most under INT4. Then we applied QAT only to those 6 layers for 250 steps. Result: 0.200 ROUGE-L, matching FP16 baseline. The hypothesis is that GPTQ/AWQ applied to this QAT checkpoint will lose less quality than naive PTQ."
+
+### "Why didn't QAT improve over the baseline?"
+
+"It's not meant to improve — it's meant to *prepare*. The QAT checkpoint in bf16 should match baseline (0.200 vs 0.201 — confirmed). The payoff comes after INT4 export: naive GPTQ on LoRA gave 0.196 (-0.5 pt). If QAT→GPTQ gives ≥0.199, that's the recovery. QAT is a pre-processing step, not a quality booster."

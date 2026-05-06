@@ -1,3 +1,4 @@
+from .qat_pipeline import calculate_steps
 from .ptq_pipeline import load_ptq_model_and_tokenizer, quantize_gptq_and_save
 from .sensitivity import get_quantizable_layers, quantize_dequantize_layer, save_original_weights, \
                          restore_weights, evaluate_rouge_on_subset, run_per_block_sweep, \
@@ -5,6 +6,7 @@ from .sensitivity import get_quantizable_layers, quantize_dequantize_layer, save
 from .fake_quant_layer import FakeQuantLinear
 
 __all__ = [
+    "calculate_steps",
     "load_ptq_model_and_tokenizer",
     "quantize_gptq_and_save",
     "get_quantizable_layers",

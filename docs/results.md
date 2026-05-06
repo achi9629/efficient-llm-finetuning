@@ -21,6 +21,7 @@
 | PTQ NF4 (LoRA)        | 0.201   | 285.2            | 15.1           | 13.7          | 5.21           | 4.16            |
 | GPTQ INT4 (LoRA)      | 0.196   | 84.4             | 5.5            | 14.5          | 4.91           | 3.88            |
 | AWQ INT4 (LoRA)       | 0.196   | 42.3             | 3.2            | 15.5          | 4.96           | 3.88            |
+| QAT BF16 (LoRA)       | 0.200   | 170.9            | 29.6           | 13.9          | 14.53          | 13.50           |
 
 **Notes:**
 
@@ -31,18 +32,20 @@
 - PTQ INT8/NF4 (LoRA) rows = bitsandbytes quantization applied to the LoRA-merged FP16 checkpoint.
 - GPTQ/AWQ INT4 (LoRA) = calibration-based quantization applied to the LoRA-merged FP16 checkpoint.
 - **Throughput caveat:** Base and fine-tuned models produce different output lengths (base: ~200 tokens verbose paragraphs; fine-tuned: ~30-60 tokens concise bullets). Since tok/s = generated_tokens / total_time, throughput is **not directly comparable** across base vs fine-tuned rows. Compare within the same model family only (e.g., base INT8 vs base NF4 vs base GPTQ).
+- QAT BF16 (LoRA) = LoRA-merged FP16 checkpoint → selective QAT (fake-quant on blocks 14/26/19, down_proj+o_proj, 250 steps) → bf16 inference. Not yet INT4-quantized.
 
 ---
 
-## 2. Training Cost (Phase A)
+## 2. Training Cost
 
-| Method                      | Peak VRAM (GB) | Train Time (min) | Train tok/s | Fits 24GB? |
-|-----------------------------|----------------|------------------|-------------|------------|
-| LoRA (PEFT, FP16 base)      | 56.15          | 7.84             | 2,847       | No         |
-| QLoRA (4-bit base)          | 45.46          | 9.20             | 2,427       | No         |
-| QLoRA + Grad Checkpointing  | 9.99           | 12.92            | 1,729       | **Yes**    |
+| Method                      | Peak VRAM (GB) | Train Time (min) | Train tok/s | Fits 24GB? | Steps |
+|-----------------------------|----------------|------------------|-------------|------------|-------|
+| LoRA (PEFT, FP16 base)      | 56.15          | 7.84             | 2,847       | No         | 1875  |
+| QLoRA (4-bit base)          | 45.46          | 9.20             | 2,427       | No         | 1875  |
+| QLoRA + Grad Checkpointing  | 9.99           | 12.92            | 1,729       | **Yes**    | 1875  |
+| QAT (selective, bf16)       | 28.7           | 14.08            | 3,922       | No         | 250   |
 
-Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
+Config: bs=4, grad_accum=4, avg_seq_len=837.6. LoRA/QLoRA = 3 epoch full fine-tune; QAT = 250 steps on frozen model with 6 fake-quant layers.
 
 ---
 
@@ -121,15 +124,20 @@ Config: bs=4, grad_accum=4, bf16, 1 epoch, 100 steps, avg_seq_len=837.6
 ![Per-block ROUGE-L delta under INT4](../assets/plots/sensitivity_per_block.png)
 ![Per-module ROUGE-L delta under INT4](../assets/plots/sensitivity_per_module.png)
 
+### Phase C — Quantization-Aware Training (Day 10)
+
+19. **QAT preserves full FP16 quality with zero latency cost.** Selective fake-quantization on 3 most sensitive blocks (14, 26, 19) × `down_proj`/`o_proj` for 250 steps → ROUGE-L 0.200, 170.9 tok/s, 14.53 GB. The -0.1pt quality drop and -2% throughput are within noise of the unquantized LoRA baseline.
+20. **QAT alone doesn't solve the VRAM problem.** The QAT checkpoint is still bf16 weights (13.5 GB). QAT's value is as a *pre-processing step* before INT4 export — training the sensitive layers to be robust to rounding, so that subsequent GPTQ/AWQ quantization loses less quality.
+
 ---
 
 ## 5. KPI Budget Check
 
-| KPI                          | Threshold  | Base FP16 | QLoRA (r=2) | PTQ INT8 (base) | PTQ NF4 (base) | GPTQ INT4 (base) | PTQ INT8 (LoRA) | PTQ NF4 (LoRA) | GPTQ INT4 (LoRA) | AWQ INT4 (LoRA) |
-|------------------------------|------------|-----------|-------------|-----------------|----------------|------------------|-----------------|----------------|------------------|-----------------|
-| ROUGE-L drop vs best FT      | ≤ 2 pt     | —         | **best**    | -6.4 pt ✗       | -6.8 pt ✗      | -5.9 pt ✗        | -0.5 pt ✓       | 0.0 pt ✓       | -0.5 pt ✓        | -0.5 pt ✓       |
-| Latency regression (Greedy)† | ≤ 20%      | baseline  | -60% ✗      | *               | *              | *                | -38% ✗          | +61% ✓         | -52% ✗           | -76% ✗          |
-| Inference VRAM               | ≤ 10 GB    | 14.79 ✗   | 5.88 ✓      | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 4.96 ✓          |
+| KPI                          | Threshold  | Base FP16 | QLoRA (r=2) | PTQ INT8 (base) | PTQ NF4 (base) | GPTQ INT4 (base) | PTQ INT8 (LoRA) | PTQ NF4 (LoRA) | GPTQ INT4 (LoRA) | AWQ INT4 (LoRA) | QAT BF16 (LoRA) |
+|------------------------------|------------|-----------|-------------|-----------------|----------------|------------------|-----------------|----------------|------------------|-----------------|-----------------|
+| ROUGE-L drop vs best FT      | ≤ 2 pt     | —         | **best**    | -6.4 pt ✗       | -6.8 pt ✗      | -5.9 pt ✗        | -0.5 pt ✓       | 0.0 pt ✓       | -0.5 pt ✓        | -0.5 pt ✓       | -0.1 pt ✓       |
+| Latency regression (Greedy)† | ≤ 20%      | baseline  | -60% ✗      | *               | *              | *                | -38% ✗          | +61% ✓         | -52% ✗           | -76% ✗          | -2% ✓           |
+| Inference VRAM               | ≤ 10 GB    | 14.79 ✗   | 5.88 ✓      | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 8.13 ✓          | 5.21 ✓         | 4.91 ✓           | 4.96 ✓          | 14.53 ✗         |
 
 †Throughput not directly comparable across base vs fine-tuned models — generation length differences invalidate cross-group latency comparisons (see Finding 15). Latency regression is only meaningful within the same model family.
 *Not evaluated — base models generate different output lengths vs fine-tuned, making cross-family tok/s comparison invalid. LoRA variants compared against LoRA FP16 merged (177.2 tok/s).

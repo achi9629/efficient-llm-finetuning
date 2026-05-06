@@ -1,0 +1,20 @@
+{
+  "run_name": "_qat_block3_module2_4bits_steps250_20260506_183257_cnndaily_20260507_052630",
+  "timestamp": "2026-05-07T05:41:36.126811",
+  "greedy": {
+    "tok_per_sec_p50": 170.88852466898783,
+    "tok_per_sec_p90": 242.93169778425613,
+    "tok_per_sec_p95": 279.41153369533083,
+    "ttft_ms_avg": 13.86663957964629
+  },
+  "beam_search": {
+    "tok_per_sec_p50": 29.55509746916676,
+    "tok_per_sec_p90": 33.09167053883556,
+    "tok_per_sec_p95": 34.07314298119482
+  },
+  "peak_vram_gb": 14.53,
+  "current_vram_gb": 13.51,
+  "reserved_vram_gb": 15.13,
+  "model_size_gb": 13.5,
+  "param_count_billion": 7.25
+}
