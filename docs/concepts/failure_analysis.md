@@ -11,9 +11,9 @@ All findings are specific to Mistral-7B-v0.3 on CNN/DailyMail summarization.
 
 **Expected:** Higher rank = more capacity = better or equal quality.
 
-**Root cause:** Dataset too small (~1.6k training samples) to fill the capacity of high-rank adapters. Extra parameters fit noise rather than signal — classic overfitting without visible train loss divergence.
+**Root cause:** Dataset too small (~10k training samples) to fill the capacity of high-rank adapters. Extra parameters fit noise rather than signal — classic overfitting without visible train loss divergence.
 
-**Fix/Takeaway:** Always sweep rank. On small datasets (<10k), start from r=2-4. Higher rank needs proportionally more data to justify the capacity.
+**Fix/Takeaway:** Always sweep rank. On small datasets (~10k), start from r=2-4. Higher rank needs proportionally more data to justify the capacity.
 
 ---
 

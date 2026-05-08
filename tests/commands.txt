@@ -12,3 +12,6 @@ CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python -W ignore::DeprecationWarning -W ig
 
 # test_sensitivity
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python -W ignore::DeprecationWarning -W ignore::FutureWarning -m pytest tests/test_sensitivity.py -v --log-cli-level=INFO
+
+# code_coverage
+PYTHONPATH=src python -W ignore::DeprecationWarning -m pytest tests/ --cov=src/finetuning/ --cov-report=term-missing --cov-report=xml --cov-fail-under=85

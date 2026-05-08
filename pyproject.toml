@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "efficient-llm-finetuning"
+version = "0.1.0"
+description = "Systematic comparison of LLM adaptation (LoRA/QLoRA) and compression (PTQ/GPTQ/AWQ/QAT) for Mistral-7B"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    # Core ML
+    "torch>=2.4.0",
+    "transformers>=4.44.0",
+    "datasets>=4.0.0",
+    "accelerate>=0.33.0",
+    "safetensors>=0.7.0",
+    "tokenizers>=0.19.0",
+    "sentencepiece>=0.2.1",
+
+    # LoRA / QLoRA
+    "peft>=0.19.1",
+    "bitsandbytes>=0.49.2",
+
+    # Quantization (GPTQ / AWQ)
+    "auto_gptq>=0.7.1",
+    "autoawq>=0.2.6",
+
+    # Evaluation
+    "evaluate>=0.4.6",
+    "rouge_score>=0.1.2",
+
+    # Utilities
+    "numpy>=1.26.4",
+    "pandas>=2.3.3",
+    "pyyaml>=6.0.3",
+    "tqdm>=4.67.3",
+    "matplotlib>=3.10.8",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.0.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
