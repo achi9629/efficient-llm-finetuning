@@ -176,6 +176,28 @@ docs/                      # Concept deep-dives, results, failure analysis
 
 ---
 
+## Setup
+
+**Requirements:** Python 3.10+, CUDA 11.8+, GPU with ≥24 GB VRAM (A100 recommended)
+
+```bash
+# Clone
+git clone https://github.com/achi9629/efficient-llm-finetuning.git
+cd efficient-llm-finetuning
+
+# Install (pinned versions)
+pip install -r requirements.txt
+
+# Or editable install
+pip install -e ".\[test]"
+
+# Download model (requires HF access token)
+huggingface-cli download mistralai/Mistral-7B-v0.3 --local-dir assets/models/Mistral-7B-v0.3
+
+# Dataset downloads automatically on first run via HuggingFace datasets
+```
+
+
 ## Quick Start
 
 ```bash
